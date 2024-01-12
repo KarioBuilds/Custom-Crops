@@ -8,7 +8,7 @@ plugins {
 allprojects {
 
     project.group = "net.momirealms"
-    project.version = "3.3.1.9"
+    project.version = "3.3.1.10"
 
     apply<JavaPlugin>()
     apply(plugin = "java")
@@ -39,6 +39,7 @@ allprojects {
         maven("https://nexus.phoenixdevt.fr/repository/maven-public/")
         maven("https://r.irepo.space/maven/")
         maven("https://repo.auxilor.io/repository/maven-public/")
+        maven("https://nexus.betonquest.org/repository/betonquest/")
     }
 
     dependencies {
