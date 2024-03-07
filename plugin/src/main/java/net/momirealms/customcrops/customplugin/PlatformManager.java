@@ -44,10 +44,8 @@ import net.momirealms.customcrops.api.object.wateringcan.WateringCanConfig;
 import net.momirealms.customcrops.api.object.world.SimpleLocation;
 import net.momirealms.customcrops.customplugin.itemsadder.ItemsAdderHandler;
 import net.momirealms.customcrops.customplugin.oraxen.OraxenHandler;
-import net.momirealms.customcrops.helper.Log;
 import net.momirealms.customcrops.util.AdventureUtils;
 import net.momirealms.customcrops.util.RotationUtils;
-import net.momirealms.protectionlib.ProtectionLib;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -402,7 +400,7 @@ public class PlatformManager extends Function {
             return false;
         }
 
-        if (!ProtectionLib.canPlace(player, location)) {
+        if (!plugin.getAntiGriefLib().canPlace(player, location)) {
             return true;
         }
 
@@ -530,7 +528,7 @@ public class PlatformManager extends Function {
             return true;
         }
 
-        if (!ProtectionLib.canPlace(player, location)) {
+        if (!plugin.getAntiGriefLib().canPlace(player, location)) {
             return true;
         }
 
@@ -567,7 +565,7 @@ public class PlatformManager extends Function {
             return true;
         }
 
-        if (!ProtectionLib.canBreak(player, location)) {
+        if (!plugin.getAntiGriefLib().canBreak(player, location)) {
             return true;
         }
 
@@ -678,9 +676,9 @@ public class PlatformManager extends Function {
                     if (inAc != null) {
                         for (Action action : inAc) {
                             action.doOn(
-                                player,
-                                SimpleLocation.getByBukkitLocation(location),
-                                cropConfig.getCropMode()
+                                    player,
+                                    SimpleLocation.getByBukkitLocation(location),
+                                    cropConfig.getCropMode()
                             );
                         }
                     }
@@ -700,7 +698,7 @@ public class PlatformManager extends Function {
         if (potConfig == null)
             return false;
 
-        if (!ProtectionLib.canPlace(player, location))
+        if (!plugin.getAntiGriefLib().canPlace(player, location))
             return true;
 
         PotInteractEvent potInteractEvent = new PotInteractEvent(player, item_in_hand, location, pot_id);
@@ -1065,7 +1063,7 @@ public class PlatformManager extends Function {
 
         outer: {
             if (id != null && location != null) {
-                if (!ProtectionLib.canPlace(player, location))
+                if (!plugin.getAntiGriefLib().canPlace(player, location))
                     return true;
                 if (!wateringCanConfig.canUse(player, location))
                     return true;
@@ -1083,34 +1081,26 @@ public class PlatformManager extends Function {
                 }
             }
 
-            List<Block> lineOfSight = player.getLineOfSight(null, 5);
-            List<String> blockIds = lineOfSight.stream().map(block -> {
-                if (block == null) {
-                    return "AIR";
-                }
-                if (block.getBlockData() instanceof Waterlogged waterlogged && waterlogged.isWaterlogged()) {
-                    return "WATER";
-                }
-                return plugin.getPlatformInterface().getBlockID(block);
-            }).toList();
+            Block targetBlock = player.getTargetBlockExact(5, FluidCollisionMode.ALWAYS);
+            if (targetBlock == null)
+                return true;
+            String blockId = plugin.getPlatformInterface().getBlockID(targetBlock);
+            if (targetBlock.getBlockData() instanceof Waterlogged waterlogged && waterlogged.isWaterlogged()) {
+                blockId = "WATER";
+            }
 
             for (PositiveFillMethod positiveFillMethod : wateringCanConfig.getPositiveFillMethods()) {
-                int index = 0;
-                for (String blockId : blockIds) {
-                    if (positiveFillMethod.getId().equals(blockId)) {
-                        Block block = lineOfSight.get(index);
-                        if (!ProtectionLib.canPlace(player, block.getLocation()))
-                            return true;
-                        if (!wateringCanConfig.canUse(player, location))
-                            return true;
-                        add = positiveFillMethod.getAmount();
-                        if (positiveFillMethod.getSound() != null)
-                            AdventureUtils.playerSound(player, positiveFillMethod.getSound());
-                        if (positiveFillMethod.getParticle() != null)
-                            block.getWorld().spawnParticle(positiveFillMethod.getParticle(), block.getLocation().add(0.5,1.1, 0.5),5,0.1,0.1,0.1);
-                        break;
-                    }
-                    index++;
+                if (positiveFillMethod.getId().equals(blockId)) {
+                    if (!plugin.getAntiGriefLib().canPlace(player, targetBlock.getLocation()))
+                        return true;
+                    if (!wateringCanConfig.canUse(player, location))
+                        return true;
+                    add = positiveFillMethod.getAmount();
+                    if (positiveFillMethod.getSound() != null)
+                        AdventureUtils.playerSound(player, positiveFillMethod.getSound());
+                    if (positiveFillMethod.getParticle() != null)
+                        targetBlock.getWorld().spawnParticle(positiveFillMethod.getParticle(), targetBlock.getLocation().add(0.5,1.1, 0.5),5,0.1,0.1,0.1);
+                    break;
                 }
             }
         }
