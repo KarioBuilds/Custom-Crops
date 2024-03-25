@@ -19,6 +19,7 @@ package net.momirealms.customcrops.api.manager;
 
 import net.momirealms.customcrops.api.common.Reloadable;
 import net.momirealms.customcrops.api.mechanic.item.*;
+import net.momirealms.customcrops.api.mechanic.world.AbstractWorldAdaptor;
 import net.momirealms.customcrops.api.mechanic.world.CustomCropsBlock;
 import net.momirealms.customcrops.api.mechanic.world.SimpleLocation;
 import net.momirealms.customcrops.api.mechanic.world.level.*;
@@ -132,11 +133,17 @@ public interface WorldManager extends Reloadable {
 
     void handleChunkUnload(Chunk bukkitChunk);
 
-    void saveChunkToFile(CustomCropsChunk chunk);
+    void saveChunkToCachedRegion(CustomCropsChunk chunk);
+
+    void saveRegionToFile(CustomCropsRegion region);
 
     void removeGlassAt(@NotNull SimpleLocation location);
 
     void removeScarecrowAt(@NotNull SimpleLocation location);
 
     CustomCropsBlock removeAnythingAt(SimpleLocation location);
+
+    AbstractWorldAdaptor getWorldAdaptor();
+
+    void saveInfoData(CustomCropsWorld customCropsWorld);
 }

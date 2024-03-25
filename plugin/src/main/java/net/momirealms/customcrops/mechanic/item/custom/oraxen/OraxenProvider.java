@@ -21,8 +21,9 @@ import io.th0rgal.oraxen.api.OraxenBlocks;
 import io.th0rgal.oraxen.api.OraxenFurniture;
 import io.th0rgal.oraxen.api.OraxenItems;
 import io.th0rgal.oraxen.items.ItemBuilder;
+import io.th0rgal.oraxen.mechanics.Mechanic;
 import io.th0rgal.oraxen.mechanics.provided.gameplay.furniture.FurnitureMechanic;
-import io.th0rgal.oraxen.mechanics.provided.gameplay.noteblock.NoteBlockMechanic;
+import net.momirealms.customcrops.api.util.LogUtils;
 import net.momirealms.customcrops.mechanic.item.CustomProvider;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -40,7 +41,7 @@ public class OraxenProvider implements CustomProvider {
         if (block.getType() == Material.AIR) {
             return false;
         }
-        if (OraxenBlocks.remove(location, null, false)) {
+        if (!OraxenBlocks.remove(location, null, false)) {
             block.setType(Material.AIR);
         }
         return true;
@@ -52,8 +53,14 @@ public class OraxenProvider implements CustomProvider {
     }
 
     @Override
-    public void placeFurniture(Location location, String id) {
-         OraxenFurniture.place(id, location, Rotation.NONE, BlockFace.UP);
+    public Entity placeFurniture(Location location, String id) {
+        Location center = location.toCenterLocation();
+        center.setY(center.getBlockY());
+        Entity entity = OraxenFurniture.place(id, location, Rotation.NONE, BlockFace.UP);
+        if (entity == null) {
+            LogUtils.warn("Furniture(" + id +") doesn't exist in Oraxen configs. Please double check if that furniture exists.");
+        }
+        return entity;
     }
 
     @Override
@@ -63,7 +70,7 @@ public class OraxenProvider implements CustomProvider {
 
     @Override
     public String getBlockID(Block block) {
-        NoteBlockMechanic mechanic = OraxenBlocks.getNoteBlockMechanic(block);
+        Mechanic mechanic = OraxenBlocks.getOraxenBlock(block.getLocation());
         if (mechanic == null) {
             return block.getType().name();
         }
@@ -71,16 +78,17 @@ public class OraxenProvider implements CustomProvider {
     }
 
     @Override
-    public String getItemID(ItemStack itemInHand) {
-        String id = OraxenItems.getIdByItem(itemInHand);
+    public String getItemID(ItemStack itemStack) {
+        String id = OraxenItems.getIdByItem(itemStack);
         if (id == null) {
-            return itemInHand.getType().name();
+            return itemStack.getType().name();
         }
         return id;
     }
 
     @Override
     public ItemStack getItemStack(String id) {
+        if (id == null) return new ItemStack(Material.AIR);
         ItemBuilder builder = OraxenItems.getItemById(id);
         if (builder == null) {
             return null;

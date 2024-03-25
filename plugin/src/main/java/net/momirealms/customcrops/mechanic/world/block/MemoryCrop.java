@@ -28,6 +28,7 @@ import net.momirealms.customcrops.api.mechanic.item.Crop;
 import net.momirealms.customcrops.api.mechanic.item.Fertilizer;
 import net.momirealms.customcrops.api.mechanic.item.ItemType;
 import net.momirealms.customcrops.api.mechanic.item.fertilizer.SpeedGrow;
+import net.momirealms.customcrops.api.mechanic.misc.CRotation;
 import net.momirealms.customcrops.api.mechanic.requirement.State;
 import net.momirealms.customcrops.api.mechanic.world.SimpleLocation;
 import net.momirealms.customcrops.api.mechanic.world.level.AbstractCustomCropsBlock;
@@ -68,6 +69,11 @@ public class MemoryCrop extends AbstractCustomCropsBlock implements WorldCrop {
 
     @Override
     public void setPoint(int point) {
+        if (point < 0) return;
+        int max = getConfig().getMaxPoints();
+        if (point > max) {
+            point = max;
+        }
         setData("point", new IntTag("point", point));
     }
 
@@ -111,6 +117,7 @@ public class MemoryCrop extends AbstractCustomCropsBlock implements WorldCrop {
 
         SimpleLocation location = getLocation();
         Location bukkitLocation = location.getBukkitLocation();
+        if (bukkitLocation == null) return;
 
         int previous = getPoint();
 
@@ -167,8 +174,8 @@ public class MemoryCrop extends AbstractCustomCropsBlock implements WorldCrop {
                 }
             }
             if (pre.equals(after)) return;
-            CustomCropsPlugin.get().getItemManager().removeAnythingAt(bukkitLocation);
-            CustomCropsPlugin.get().getItemManager().placeItem(bukkitLocation, crop.getItemCarrier(), after);
+            CRotation CRotation = CustomCropsPlugin.get().getItemManager().removeAnythingAt(bukkitLocation);
+            CustomCropsPlugin.get().getItemManager().placeItem(bukkitLocation, crop.getItemCarrier(), after, CRotation);
         }, bukkitLocation);
     }
 }

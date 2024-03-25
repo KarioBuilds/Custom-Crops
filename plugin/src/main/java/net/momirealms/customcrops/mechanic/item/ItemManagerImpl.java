@@ -31,14 +31,17 @@ import net.momirealms.customcrops.api.mechanic.condition.DeathConditions;
 import net.momirealms.customcrops.api.mechanic.item.*;
 import net.momirealms.customcrops.api.mechanic.item.water.PassiveFillMethod;
 import net.momirealms.customcrops.api.mechanic.item.water.PositiveFillMethod;
+import net.momirealms.customcrops.api.mechanic.misc.CRotation;
+import net.momirealms.customcrops.api.mechanic.misc.Reason;
 import net.momirealms.customcrops.api.mechanic.misc.image.WaterBar;
 import net.momirealms.customcrops.api.mechanic.requirement.State;
+import net.momirealms.customcrops.api.mechanic.world.CustomCropsBlock;
 import net.momirealms.customcrops.api.mechanic.world.SimpleLocation;
-import net.momirealms.customcrops.api.mechanic.world.level.WorldCrop;
-import net.momirealms.customcrops.api.mechanic.world.level.WorldPot;
-import net.momirealms.customcrops.api.mechanic.world.level.WorldSprinkler;
+import net.momirealms.customcrops.api.mechanic.world.level.*;
 import net.momirealms.customcrops.api.util.LogUtils;
 import net.momirealms.customcrops.mechanic.item.custom.AbstractCustomListener;
+import net.momirealms.customcrops.mechanic.item.custom.crucible.CrucibleListener;
+import net.momirealms.customcrops.mechanic.item.custom.crucible.CrucibleProvider;
 import net.momirealms.customcrops.mechanic.item.custom.itemsadder.ItemsAdderListener;
 import net.momirealms.customcrops.mechanic.item.custom.itemsadder.ItemsAdderProvider;
 import net.momirealms.customcrops.mechanic.item.custom.oraxen.OraxenListener;
@@ -56,17 +59,20 @@ import net.momirealms.customcrops.mechanic.world.block.*;
 import net.momirealms.customcrops.utils.ConfigUtils;
 import net.momirealms.customcrops.utils.EventUtils;
 import net.momirealms.customcrops.utils.ItemUtils;
+import net.momirealms.customcrops.utils.RotationUtils;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Waterlogged;
 import org.bukkit.block.data.type.Farmland;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.ItemDisplay;
+import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Cancellable;
+import org.bukkit.event.Event;
 import org.bukkit.event.HandlerList;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
@@ -124,6 +130,9 @@ public class ItemManagerImpl implements ItemManager {
         } else if (Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) {
             listener = new ItemsAdderListener(this);
             customProvider = new ItemsAdderProvider();
+        } else if (Bukkit.getPluginManager().isPluginEnabled("MythicCrucible")) {
+            listener = new CrucibleListener(this);
+            customProvider = new CrucibleProvider();
         } else {
             LogUtils.severe("======================================================");
             LogUtils.severe(" Please install ItemsAdder or Oraxen as dependency.");
@@ -335,8 +344,24 @@ public class ItemManagerImpl implements ItemManager {
     }
 
     @Override
-    public void removeAnythingAt(Location location) {
-        customProvider.removeAnythingAt(location);
+    public void placeItem(Location location, ItemCarrier carrier, String id, CRotation rotate) {
+        switch (carrier) {
+            case ITEM_DISPLAY, ITEM_FRAME -> {
+                Entity entity = customProvider.placeFurniture(location, id);
+                if (rotate == null || rotate == CRotation.NONE) return;
+                if (entity instanceof ItemFrame frame) {
+                    frame.setRotation(RotationUtils.getBukkitRotation(rotate));
+                } else if (entity instanceof ItemDisplay display) {
+                    display.setRotation(RotationUtils.getFloatRotation(rotate), display.getLocation().getPitch());
+                }
+            }
+            case TRIPWIRE, NOTE_BLOCK, CHORUS, MUSHROOM -> customProvider.placeBlock(location, id);
+        }
+    }
+
+    @Override
+    public CRotation removeAnythingAt(Location location) {
+        return customProvider.removeAnythingAt(location);
     }
 
     @Override
@@ -610,12 +635,23 @@ public class ItemManagerImpl implements ItemManager {
                     if (!(conditionWrapper instanceof BreakWrapper breakWrapper)) {
                         return FunctionResult.PASS;
                     }
+
+                    // get or fix
+                    Location location = breakWrapper.getLocation();
+                    SimpleLocation simpleLocation = SimpleLocation.of(location);
+                    Optional<WorldGlass> optionalWorldGlass = plugin.getWorldManager().getGlassAt(simpleLocation);
+                    if (optionalWorldGlass.isEmpty()) {
+                        WorldGlass glass = new MemoryGlass(simpleLocation);
+                        optionalWorldGlass = Optional.of(glass);
+                        plugin.getWorldManager().addGlassAt(glass, simpleLocation);
+                    }
+
                     // fire event
-                    GreenhouseGlassBreakEvent event = new GreenhouseGlassBreakEvent(breakWrapper.getPlayer(), breakWrapper.getLocation());
+                    GreenhouseGlassBreakEvent event = new GreenhouseGlassBreakEvent(breakWrapper.getPlayer(), location, optionalWorldGlass.get(), Reason.BREAK);
                     if (EventUtils.fireAndCheckCancel(event))
                         return FunctionResult.CANCEL_EVENT_AND_RETURN;
 
-                    plugin.getWorldManager().removeGlassAt(SimpleLocation.of(breakWrapper.getLocation()));
+                    plugin.getWorldManager().removeGlassAt(simpleLocation);
                     return FunctionResult.RETURN;
                 }, CFunction.FunctionPriority.NORMAL)
         );
@@ -642,12 +678,23 @@ public class ItemManagerImpl implements ItemManager {
                     if (!(conditionWrapper instanceof BreakWrapper breakWrapper)) {
                         return FunctionResult.PASS;
                     }
+
+                    // get or fix
+                    Location location = breakWrapper.getLocation();
+                    SimpleLocation simpleLocation = SimpleLocation.of(location);
+                    Optional<WorldScarecrow> optionalWorldScarecrow = plugin.getWorldManager().getScarecrowAt(simpleLocation);
+                    if (optionalWorldScarecrow.isEmpty()) {
+                        WorldScarecrow scarecrow = new MemoryScarecrow(simpleLocation);
+                        optionalWorldScarecrow = Optional.of(scarecrow);
+                        plugin.getWorldManager().addScarecrowAt(scarecrow, simpleLocation);
+                    }
+
                     // fire event
-                    ScarecrowBreakEvent event = new ScarecrowBreakEvent(breakWrapper.getPlayer(), breakWrapper.getLocation());
+                    ScarecrowBreakEvent event = new ScarecrowBreakEvent(breakWrapper.getPlayer(), location, optionalWorldScarecrow.get(), Reason.BREAK);
                     if (EventUtils.fireAndCheckCancel(event))
                         return FunctionResult.CANCEL_EVENT_AND_RETURN;
 
-                    plugin.getWorldManager().removeScarecrowAt(SimpleLocation.of(breakWrapper.getLocation()));
+                    plugin.getWorldManager().removeScarecrowAt(simpleLocation);
                     return FunctionResult.RETURN;
                 }, CFunction.FunctionPriority.NORMAL)
         );
@@ -699,13 +746,14 @@ public class ItemManagerImpl implements ItemManager {
                         return FunctionResult.PASS;
                     }
                     // is a pot
-                    Pot pot = getPotByBlock(blockWrapper.getClickedBlock());
+                    Block block = blockWrapper.getClickedBlock();
+                    Pot pot = getPotByBlock(block);
                     if (pot == null) {
                         return FunctionResult.PASS;
                     }
                     final Player player = blockWrapper.getPlayer();
                     final ItemStack itemStack = blockWrapper.getItemInHand();
-                    final Location clicked = blockWrapper.getClickedBlock().getLocation();
+                    final Location clicked = block.getLocation();
                     State state = new State(player, itemStack, clicked);
                     // check watering-can requirements
                     if (!RequirementManager.isRequirementMet(state, wateringCan.getRequirements())) {
@@ -718,18 +766,37 @@ public class ItemManagerImpl implements ItemManager {
                     }
                     // check amount of water
                     int waterInCan = wateringCan.getCurrentWater(itemStack);
-                    state.setArg("{storage}", String.valueOf(wateringCan.getStorage()));
+
                     if (waterInCan > 0 || wateringCan.isInfinite()) {
+
+                        Collection<Location> pots = getPotInRange(clicked, wateringCan.getWidth(), wateringCan.getLength(), player.getLocation().getYaw(), pot.getKey());
+                        // get or fix pot
+                        SimpleLocation simpleLocation = SimpleLocation.of(clicked);
+                        Optional<WorldPot> worldPot = plugin.getWorldManager().getPotAt(simpleLocation);
+                        if (worldPot.isEmpty()) {
+                            plugin.debug("Found pot data not exists at " + simpleLocation + ". Fixing it.");
+                            MemoryPot memoryPot = new MemoryPot(simpleLocation, pot.getKey());
+                            plugin.getWorldManager().addPotAt(memoryPot, simpleLocation);
+                            worldPot = Optional.of(memoryPot);
+                        }
+
+                        // fire the event
+                        WateringCanWaterEvent waterEvent = new WateringCanWaterEvent(player, itemStack, new HashSet<>(pots), wateringCan, worldPot.get());
+                        if (EventUtils.fireAndCheckCancel(waterEvent))
+                            return FunctionResult.CANCEL_EVENT_AND_RETURN;
+
+                        state.setArg("{storage}", String.valueOf(wateringCan.getStorage()));
                         state.setArg("{current}", String.valueOf(waterInCan - 1));
                         state.setArg("{water_bar}", wateringCan.getWaterBar() == null ? "" : wateringCan.getWaterBar().getWaterBar(waterInCan - 1, wateringCan.getStorage()));
                         wateringCan.updateItem(player, itemStack, waterInCan - 1, state.getArgs());
                         wateringCan.trigger(ActionTrigger.CONSUME_WATER, state);
-                        Collection<Location> pots = getPotInRange(clicked, wateringCan.getWidth(), wateringCan.getLength(), player.getLocation().getYaw(), pot.getKey());
-                        for (Location location : pots) {
+
+                        for (Location location : waterEvent.getLocation()) {
                             plugin.getWorldManager().addWaterToPot(pot, SimpleLocation.of(location), wateringCan.getWater());
                             pot.trigger(ActionTrigger.ADD_WATER, new State(player, itemStack, location));
                         }
                     } else {
+                        state.setArg("{storage}", String.valueOf(wateringCan.getStorage()));
                         state.setArg("{current}", "0");
                         state.setArg("{water_bar}", wateringCan.getWaterBar() == null ? "" : wateringCan.getWaterBar().getWaterBar(0, wateringCan.getStorage()));
                         wateringCan.trigger(ActionTrigger.NO_WATER, state);
@@ -753,7 +820,7 @@ public class ItemManagerImpl implements ItemManager {
                     Block potBlock = blockWrapper.getClickedBlock().getRelative(BlockFace.DOWN);
                     Pot pot = getPotByBlock(potBlock);
                     if (pot == null) {
-                        LogUtils.warn("Unexpected issue: Detetced that crops are not planted on a pot: " + blockWrapper.getClickedBlock().getLocation());
+                        plugin.debug("Unexpected issue: Detetced that crops are not planted on a pot: " + blockWrapper.getClickedBlock().getLocation());
                         return FunctionResult.RETURN;
                     }
 
@@ -780,18 +847,38 @@ public class ItemManagerImpl implements ItemManager {
                     }
                     // check amount of water
                     int waterInCan = wateringCan.getCurrentWater(itemStack);
-                    state.setArg("{storage}", String.valueOf(wateringCan.getStorage()));
+
                     if (waterInCan > 0 || wateringCan.isInfinite()) {
+
+                        Collection<Location> pots = getPotInRange(potBlock.getLocation(), wateringCan.getWidth(), wateringCan.getLength(), player.getLocation().getYaw(), pot.getKey());
+
+                        // get or fix pot
+                        SimpleLocation simpleLocation = SimpleLocation.of(potBlock.getLocation());
+                        Optional<WorldPot> worldPot = plugin.getWorldManager().getPotAt(simpleLocation);
+                        if (worldPot.isEmpty()) {
+                            plugin.debug("Found pot data not exists at " + simpleLocation + ". Fixing it.");
+                            MemoryPot memoryPot = new MemoryPot(simpleLocation, pot.getKey());
+                            plugin.getWorldManager().addPotAt(memoryPot, simpleLocation);
+                            worldPot = Optional.of(memoryPot);
+                        }
+
+                        // fire the event
+                        WateringCanWaterEvent waterEvent = new WateringCanWaterEvent(player, itemStack, new HashSet<>(pots), wateringCan, worldPot.get());
+                        if (EventUtils.fireAndCheckCancel(waterEvent))
+                            return FunctionResult.CANCEL_EVENT_AND_RETURN;
+
+                        state.setArg("{storage}", String.valueOf(wateringCan.getStorage()));
                         state.setArg("{current}", String.valueOf(waterInCan - 1));
                         state.setArg("{water_bar}", wateringCan.getWaterBar() == null ? "" : wateringCan.getWaterBar().getWaterBar(waterInCan - 1, wateringCan.getStorage()));
                         wateringCan.updateItem(player, itemStack, waterInCan - 1, state.getArgs());
                         wateringCan.trigger(ActionTrigger.CONSUME_WATER, state);
-                        Collection<Location> pots = getPotInRange(potBlock.getLocation(), wateringCan.getWidth(), wateringCan.getLength(), player.getLocation().getYaw(), pot.getKey());
-                        for (Location location : pots) {
+
+                        for (Location location : waterEvent.getLocation()) {
                             plugin.getWorldManager().addWaterToPot(pot, SimpleLocation.of(location), wateringCan.getWater());
                             pot.trigger(ActionTrigger.ADD_WATER, new State(player, itemStack, location));
                         }
                     } else {
+                        state.setArg("{storage}", String.valueOf(wateringCan.getStorage()));
                         state.setArg("{current}", "0");
                         state.setArg("{water_bar}", wateringCan.getWaterBar() == null ? "" : wateringCan.getWaterBar().getWaterBar(0, wateringCan.getStorage()));
                         wateringCan.trigger(ActionTrigger.NO_WATER, state);
@@ -839,18 +926,38 @@ public class ItemManagerImpl implements ItemManager {
                     }
                     // check amount of water
                     int waterInCan = wateringCan.getCurrentWater(itemStack);
-                    state.setArg("{storage}", String.valueOf(wateringCan.getStorage()));
+
                     if (waterInCan > 0 || wateringCan.isInfinite()) {
+
+                        Collection<Location> pots = getPotInRange(potBlock.getLocation(), wateringCan.getWidth(), wateringCan.getLength(), player.getLocation().getYaw(), pot.getKey());
+
+                        // get or fix pot
+                        SimpleLocation simpleLocation = SimpleLocation.of(potBlock.getLocation());
+                        Optional<WorldPot> worldPot = plugin.getWorldManager().getPotAt(simpleLocation);
+                        if (worldPot.isEmpty()) {
+                            plugin.debug("Found pot data not exists at " + simpleLocation + ". Fixing it.");
+                            MemoryPot memoryPot = new MemoryPot(simpleLocation, pot.getKey());
+                            plugin.getWorldManager().addPotAt(memoryPot, simpleLocation);
+                            worldPot = Optional.of(memoryPot);
+                        }
+
+                        // fire the event
+                        WateringCanWaterEvent waterEvent = new WateringCanWaterEvent(player, itemStack, new HashSet<>(pots), wateringCan, worldPot.get());
+                        if (EventUtils.fireAndCheckCancel(waterEvent))
+                            return FunctionResult.CANCEL_EVENT_AND_RETURN;
+
+                        state.setArg("{storage}", String.valueOf(wateringCan.getStorage()));
                         state.setArg("{current}", String.valueOf(waterInCan - 1));
                         state.setArg("{water_bar}", wateringCan.getWaterBar() == null ? "" : wateringCan.getWaterBar().getWaterBar(waterInCan - 1, wateringCan.getStorage()));
                         wateringCan.updateItem(player, itemStack, waterInCan - 1, state.getArgs());
                         wateringCan.trigger(ActionTrigger.CONSUME_WATER, state);
-                        Collection<Location> pots = getPotInRange(potBlock.getLocation(), wateringCan.getWidth(), wateringCan.getLength(), player.getLocation().getYaw(), pot.getKey());
-                        for (Location location : pots) {
+
+                        for (Location location : waterEvent.getLocation()) {
                             plugin.getWorldManager().addWaterToPot(pot, SimpleLocation.of(location), wateringCan.getWater());
                             pot.trigger(ActionTrigger.ADD_WATER, new State(player, itemStack, location));
                         }
                     } else {
+                        state.setArg("{storage}", String.valueOf(wateringCan.getStorage()));
                         state.setArg("{current}", "0");
                         state.setArg("{water_bar}", wateringCan.getWaterBar() == null ? "" : wateringCan.getWaterBar().getWaterBar(0, wateringCan.getStorage()));
                         wateringCan.trigger(ActionTrigger.NO_WATER, state);
@@ -866,12 +973,15 @@ public class ItemManagerImpl implements ItemManager {
                         return FunctionResult.PASS;
                     }
                     // check watering-can requirements
-                    State state = new State(furnitureWrapper.getPlayer(), furnitureWrapper.getItemInHand(), furnitureWrapper.getLocation());
+                    Player player = furnitureWrapper.getPlayer();
+                    ItemStack itemInHand = furnitureWrapper.getItemInHand();
+                    Location location = furnitureWrapper.getLocation();
+                    State state = new State(player, itemInHand, location);
                     if (!RequirementManager.isRequirementMet(state, wateringCan.getRequirements())) {
                         return FunctionResult.RETURN;
                     }
                     // get water in can
-                    int waterInCan = wateringCan.getCurrentWater(furnitureWrapper.getItemInHand());
+                    int waterInCan = wateringCan.getCurrentWater(itemInHand);
                     String clickedFurnitureID = furnitureWrapper.getID();
                     Sprinkler sprinkler = getSprinklerBy3DItemID(clickedFurnitureID);
                     // is a sprinkler
@@ -888,21 +998,30 @@ public class ItemManagerImpl implements ItemManager {
                         // check amount of water
                         if (waterInCan > 0 || wateringCan.isInfinite()) {
                             // get sprinkler data
-                            SimpleLocation location = SimpleLocation.of(furnitureWrapper.getLocation());
-                            Optional<WorldSprinkler> worldSprinkler = plugin.getWorldManager().getSprinklerAt(location);
+                            SimpleLocation simpleLocation = SimpleLocation.of(location);
+                            Optional<WorldSprinkler> worldSprinkler = plugin.getWorldManager().getSprinklerAt(simpleLocation);
                             if (worldSprinkler.isEmpty()) {
-                                plugin.debug("Player " + furnitureWrapper.getPlayer().getName() + " tried to interact a sprinkler which not exists in memory. Fixing the data...");
+                                plugin.debug("Player " + player.getName() + " tried to interact a sprinkler which not exists in memory. Fixing the data...");
+                                WorldSprinkler sp = new MemorySprinkler(simpleLocation, sprinkler.getKey(), 0);
+                                plugin.getWorldManager().addSprinklerAt(sp, simpleLocation);
+                                worldSprinkler = Optional.of(sp);
                             } else {
                                 if (sprinkler.getStorage() <= worldSprinkler.get().getWater()) {
                                     return FunctionResult.RETURN;
                                 }
                             }
+
+                            // fire the event
+                            WateringCanWaterEvent waterEvent = new WateringCanWaterEvent(player, itemInHand, new HashSet<>(Set.of(location)), wateringCan, worldSprinkler.get());
+                            if (EventUtils.fireAndCheckCancel(waterEvent))
+                                return FunctionResult.CANCEL_EVENT_AND_RETURN;
+
                             state.setArg("{storage}", String.valueOf(wateringCan.getStorage()));
                             state.setArg("{current}", String.valueOf(waterInCan - 1));
                             state.setArg("{water_bar}", wateringCan.getWaterBar() == null ? "" : wateringCan.getWaterBar().getWaterBar(waterInCan - 1, wateringCan.getStorage()));
-                            wateringCan.updateItem(furnitureWrapper.getPlayer(), furnitureWrapper.getItemInHand(), waterInCan - 1, state.getArgs());
+                            wateringCan.updateItem(player, furnitureWrapper.getItemInHand(), waterInCan - 1, state.getArgs());
                             wateringCan.trigger(ActionTrigger.CONSUME_WATER, state);
-                            plugin.getWorldManager().addWaterToSprinkler(sprinkler, location, 1);
+                            plugin.getWorldManager().addWaterToSprinkler(sprinkler, simpleLocation, 1);
                         } else {
                             state.setArg("{storage}", String.valueOf(wateringCan.getStorage()));
                             state.setArg("{current}", "0");
@@ -918,13 +1037,18 @@ public class ItemManagerImpl implements ItemManager {
                         for (PositiveFillMethod method : methods) {
                             if (method.getId().equals(clickedFurnitureID)) {
                                 if (method.canFill(state)) {
+                                    // fire the event
+                                    WateringCanFillEvent fillEvent = new WateringCanFillEvent(player, itemInHand, location, wateringCan, method);
+                                    if (EventUtils.fireAndCheckCancel(fillEvent))
+                                        return FunctionResult.CANCEL_EVENT_AND_RETURN;
+
                                     if (waterInCan < wateringCan.getStorage()) {
                                         waterInCan += method.getAmount();
                                         waterInCan = Math.min(waterInCan, wateringCan.getStorage());
                                         state.setArg("{storage}", String.valueOf(wateringCan.getStorage()));
                                         state.setArg("{current}", String.valueOf(waterInCan));
                                         state.setArg("{water_bar}", wateringCan.getWaterBar() == null ? "" : wateringCan.getWaterBar().getWaterBar(waterInCan, wateringCan.getStorage()));
-                                        wateringCan.updateItem(furnitureWrapper.getPlayer(), furnitureWrapper.getItemInHand(), waterInCan, state.getArgs());
+                                        wateringCan.updateItem(player, furnitureWrapper.getItemInHand(), waterInCan, state.getArgs());
                                         wateringCan.trigger(ActionTrigger.ADD_WATER, state);
                                         method.trigger(state);
                                     } else {
@@ -951,12 +1075,14 @@ public class ItemManagerImpl implements ItemManager {
                     if (wateringCan.isInfinite()) {
                         return FunctionResult.PASS;
                     }
+                    Player player = interactWrapper.getPlayer();
+                    ItemStack itemInHand = interactWrapper.getItemInHand();
                     // get the clicked block
-                    Block targetBlock = interactWrapper.getPlayer().getTargetBlockExact(5, FluidCollisionMode.ALWAYS);
+                    Block targetBlock = player.getTargetBlockExact(5, FluidCollisionMode.ALWAYS);
                     if (targetBlock == null)
                         return FunctionResult.PASS;
                     // check watering-can requirements
-                    State state = new State(interactWrapper.getPlayer(), interactWrapper.getItemInHand(), targetBlock.getLocation());
+                    State state = new State(player, itemInHand, targetBlock.getLocation());
                     if (!RequirementManager.isRequirementMet(state, wateringCan.getRequirements())) {
                         return FunctionResult.RETURN;
                     }
@@ -965,18 +1091,23 @@ public class ItemManagerImpl implements ItemManager {
                     if (targetBlock.getBlockData() instanceof Waterlogged waterlogged && waterlogged.isWaterlogged()) {
                         blockID = "WATER";
                     }
-                    int water = wateringCan.getCurrentWater(interactWrapper.getItemInHand());
+                    int water = wateringCan.getCurrentWater(itemInHand);
                     PositiveFillMethod[] methods = wateringCan.getPositiveFillMethods();
                     for (PositiveFillMethod method : methods) {
                         if (method.getId().equals(blockID)) {
                             if (method.canFill(state)) {
                                 if (water < wateringCan.getStorage()) {
+                                    // fire the event
+                                    WateringCanFillEvent fillEvent = new WateringCanFillEvent(player, itemInHand, state.getLocation(), wateringCan, method);
+                                    if (EventUtils.fireAndCheckCancel(fillEvent))
+                                        return FunctionResult.CANCEL_EVENT_AND_RETURN;
+
                                     water += method.getAmount();
                                     water = Math.min(water, wateringCan.getStorage());
                                     state.setArg("{storage}", String.valueOf(wateringCan.getStorage()));
                                     state.setArg("{current}", String.valueOf(water));
                                     state.setArg("{water_bar}", wateringCan.getWaterBar() == null ? "" : wateringCan.getWaterBar().getWaterBar(water, wateringCan.getStorage()));
-                                    wateringCan.updateItem(interactWrapper.getPlayer(), interactWrapper.getItemInHand(), water, state.getArgs());
+                                    wateringCan.updateItem(player, itemInHand, water, state.getArgs());
                                     wateringCan.trigger(ActionTrigger.ADD_WATER, state);
                                     method.trigger(state);
                                 } else {
@@ -998,12 +1129,14 @@ public class ItemManagerImpl implements ItemManager {
                     if (wateringCan.isInfinite()) {
                         return FunctionResult.PASS;
                     }
+                    Player player = interactWrapper.getPlayer();
                     // get the clicked block
-                    Block targetBlock = interactWrapper.getPlayer().getTargetBlockExact(5, FluidCollisionMode.ALWAYS);
+                    Block targetBlock = player.getTargetBlockExact(5, FluidCollisionMode.ALWAYS);
                     if (targetBlock == null)
                         return FunctionResult.PASS;
                     // check watering-can requirements
-                    State state = new State(interactWrapper.getPlayer(), interactWrapper.getItemInHand(), targetBlock.getLocation());
+                    ItemStack itemInHand = interactWrapper.getItemInHand();
+                    State state = new State(player, itemInHand, targetBlock.getLocation());
                     if (!RequirementManager.isRequirementMet(state, wateringCan.getRequirements())) {
                         return FunctionResult.RETURN;
                     }
@@ -1012,18 +1145,23 @@ public class ItemManagerImpl implements ItemManager {
                     if (targetBlock.getBlockData() instanceof Waterlogged waterlogged && waterlogged.isWaterlogged()) {
                         blockID = "WATER";
                     }
-                    int water = wateringCan.getCurrentWater(interactWrapper.getItemInHand());
+                    int water = wateringCan.getCurrentWater(itemInHand);
                     PositiveFillMethod[] methods = wateringCan.getPositiveFillMethods();
                     for (PositiveFillMethod method : methods) {
                         if (method.getId().equals(blockID)) {
                             if (method.canFill(state)) {
                                 if (water < wateringCan.getStorage()) {
+                                    // fire the event
+                                    WateringCanFillEvent fillEvent = new WateringCanFillEvent(player, itemInHand, state.getLocation(), wateringCan, method);
+                                    if (EventUtils.fireAndCheckCancel(fillEvent))
+                                        return FunctionResult.CANCEL_EVENT_AND_RETURN;
+
                                     water += method.getAmount();
                                     water = Math.min(water, wateringCan.getStorage());
                                     state.setArg("{storage}", String.valueOf(wateringCan.getStorage()));
                                     state.setArg("{current}", String.valueOf(water));
                                     state.setArg("{water_bar}", wateringCan.getWaterBar() == null ? "" : wateringCan.getWaterBar().getWaterBar(water, wateringCan.getStorage()));
-                                    wateringCan.updateItem(interactWrapper.getPlayer(), interactWrapper.getItemInHand(), water, state.getArgs());
+                                    wateringCan.updateItem(player, itemInHand, water, state.getArgs());
                                     wateringCan.trigger(ActionTrigger.ADD_WATER, state);
                                     method.trigger(state);
                                 } else {
@@ -1132,7 +1270,7 @@ public class ItemManagerImpl implements ItemManager {
             );
         }
 
-        this.registerItemFunction(sprinkler.get3DItemID(), FunctionTrigger.PLACE,
+        this.registerItemFunction(new String[]{sprinkler.get3DItemID(), sprinkler.get3DItemWithWater()}, FunctionTrigger.PLACE,
                 /*
                  * This will only trigger if the sprinkler has only 3D items
                  */
@@ -1165,7 +1303,7 @@ public class ItemManagerImpl implements ItemManager {
                 }, CFunction.FunctionPriority.NORMAL)
         );
 
-        this.registerItemFunction(sprinkler.get3DItemID(), FunctionTrigger.BE_INTERACTED,
+        this.registerItemFunction(new String[]{sprinkler.get3DItemID(), sprinkler.get3DItemWithWater()}, FunctionTrigger.BE_INTERACTED,
                 /*
                  * Interact the sprinkler
                  */
@@ -1185,14 +1323,17 @@ public class ItemManagerImpl implements ItemManager {
                     Optional<WorldSprinkler> optionalSprinkler = plugin.getWorldManager().getSprinklerAt(simpleLocation);
                     if (optionalSprinkler.isEmpty()) {
                         plugin.debug("Found a sprinkler without data interacted by " + player.getName() + " at " + location);
-                        plugin.getWorldManager().addSprinklerAt(new MemorySprinkler(simpleLocation, sprinkler.getKey(), 0), simpleLocation);
-                        return FunctionResult.RETURN;
+                        WorldSprinkler newSprinkler = new MemorySprinkler(simpleLocation, sprinkler.getKey(), 0);
+                        plugin.getWorldManager().addSprinklerAt(newSprinkler, simpleLocation);
+                        optionalSprinkler = Optional.of(newSprinkler);
+                    } else {
+                        if (!optionalSprinkler.get().getKey().equals(sprinkler.getKey())) {
+                            LogUtils.warn("Found a sprinkler having inconsistent data interacted by " + player.getName() + " at " + location + ".");
+                            plugin.getWorldManager().addSprinklerAt(new MemorySprinkler(simpleLocation, sprinkler.getKey(), 0), simpleLocation);
+                            return FunctionResult.RETURN;
+                        }
                     }
-                    if (!optionalSprinkler.get().getKey().equals(sprinkler.getKey())) {
-                        LogUtils.warn("Found a sprinkler having inconsistent data interacted by " + player.getName() + " at " + location + ".");
-                        plugin.getWorldManager().addSprinklerAt(new MemorySprinkler(simpleLocation, sprinkler.getKey(), 0), simpleLocation);
-                        return FunctionResult.RETURN;
-                    }
+
                     // fire the event
                     SprinklerInteractEvent interactEvent = new SprinklerInteractEvent(player, itemInHand, location, optionalSprinkler.get());
                     if (EventUtils.fireAndCheckCancel(interactEvent)) {
@@ -1201,14 +1342,18 @@ public class ItemManagerImpl implements ItemManager {
                     // add water to sprinkler
                     String itemID = getItemID(itemInHand);
                     int itemAmount = itemInHand.getAmount();
-                    Optional<WorldSprinkler> worldSprinkler = plugin.getWorldManager().getSprinklerAt(simpleLocation);
-                    int waterInSprinkler = worldSprinkler.map(WorldSprinkler::getWater).orElse(0);
+                    int waterInSprinkler = optionalSprinkler.get().getWater();
                     // if it's not infinite
                     if (!sprinkler.isInfinite()) {
                         for (PassiveFillMethod method : sprinkler.getPassiveFillMethods()) {
                             if (method.getUsed().equals(itemID) && itemAmount >= method.getUsedAmount()) {
                                 if (method.canFill(state)) {
                                     if (waterInSprinkler < sprinkler.getStorage()) {
+                                        // fire the event
+                                        SprinklerFillEvent fillEvent = new SprinklerFillEvent(player, itemInHand, location, method, optionalSprinkler.get());
+                                        if (EventUtils.fireAndCheckCancel(fillEvent))
+                                            return FunctionResult.CANCEL_EVENT_AND_RETURN;
+
                                         if (player.getGameMode() != GameMode.CREATIVE) {
                                             itemInHand.setAmount(itemAmount - method.getUsedAmount());
                                             if (method.getReturned() != null) {
@@ -1239,7 +1384,7 @@ public class ItemManagerImpl implements ItemManager {
                 }, CFunction.FunctionPriority.NORMAL)
         );
 
-        this.registerItemFunction(sprinkler.get3DItemID(), FunctionTrigger.BE_INTERACTED,
+        this.registerItemFunction(new String[]{sprinkler.get3DItemID(), sprinkler.get3DItemWithWater()}, FunctionTrigger.BE_INTERACTED,
                 new CFunction(conditionWrapper -> {
                     if (!(conditionWrapper instanceof InteractFurnitureWrapper interactFurnitureWrapper)) {
                         return FunctionResult.PASS;
@@ -1265,7 +1410,7 @@ public class ItemManagerImpl implements ItemManager {
                 }, CFunction.FunctionPriority.LOWEST)
         );
 
-        this.registerItemFunction(sprinkler.get3DItemID(), FunctionTrigger.BREAK,
+        this.registerItemFunction(new String[]{sprinkler.get3DItemID(), sprinkler.get3DItemWithWater()}, FunctionTrigger.BREAK,
                 /*
                  * Handle breaking sprinklers
                  */
@@ -1291,7 +1436,7 @@ public class ItemManagerImpl implements ItemManager {
                         return FunctionResult.RETURN;
                     }
                     // fire event
-                    SprinklerBreakEvent breakEvent = new SprinklerBreakEvent(breakFurnitureWrapper.getPlayer(), location, optionalSprinkler.get());
+                    SprinklerBreakEvent breakEvent = new SprinklerBreakEvent(breakFurnitureWrapper.getPlayer(), location, optionalSprinkler.get(), Reason.BREAK);
                     if (EventUtils.fireAndCheckCancel(breakEvent)) {
                         return FunctionResult.CANCEL_EVENT_AND_RETURN;
                     }
@@ -1411,10 +1556,17 @@ public class ItemManagerImpl implements ItemManager {
                     Optional<WorldPot> worldPot = plugin.getWorldManager().getPotAt(simpleLocation);
                     boolean hasWater = false;
                     if (worldPot.isEmpty()) {
-                        plugin.debug("Found pot data not exists at " + simpleLocation);
+                        plugin.debug("Found pot data not exists at " + simpleLocation + ". Fixing it.");
+                        MemoryPot memoryPot = new MemoryPot(simpleLocation, pot.getKey());
+                        plugin.getWorldManager().addPotAt(memoryPot, simpleLocation);
+                        worldPot = Optional.of(memoryPot);
                     } else {
                         hasWater = worldPot.get().getWater() > 0;
                     }
+                    // fire the event
+                    FertilizerUseEvent useEvent = new FertilizerUseEvent(state.getPlayer(), itemInHand, fertilizer, location, worldPot.get());
+                    if (EventUtils.fireAndCheckCancel(useEvent))
+                        return FunctionResult.CANCEL_EVENT_AND_RETURN;
 
                     // add data
                     plugin.getWorldManager().addFertilizerToPot(pot, fertilizer, simpleLocation);
@@ -1472,10 +1624,17 @@ public class ItemManagerImpl implements ItemManager {
                     Optional<WorldPot> worldPot = plugin.getWorldManager().getPotAt(simpleLocation);
                     boolean hasWater = false;
                     if (worldPot.isEmpty()) {
-                        plugin.debug("Found pot data not exists at " + potLocation);
+                        plugin.debug("Found pot data not exists at " + simpleLocation + ". Fixing it.");
+                        MemoryPot memoryPot = new MemoryPot(simpleLocation, pot.getKey());
+                        plugin.getWorldManager().addPotAt(memoryPot, simpleLocation);
+                        worldPot = Optional.of(memoryPot);
                     } else {
                         hasWater = worldPot.get().getWater() > 0;
                     }
+                    // fire the event
+                    FertilizerUseEvent useEvent = new FertilizerUseEvent(state.getPlayer(), itemInHand, fertilizer, location, worldPot.get());
+                    if (EventUtils.fireAndCheckCancel(useEvent))
+                        return FunctionResult.CANCEL_EVENT_AND_RETURN;
 
                     // add data
                     plugin.getWorldManager().addFertilizerToPot(pot, fertilizer, simpleLocation);
@@ -1551,7 +1710,7 @@ public class ItemManagerImpl implements ItemManager {
 
     @SuppressWarnings("DuplicatedCode")
     private void loadCrop(String key, ConfigurationSection section) {
-        ItemCarrier itemCarrier = ItemCarrier.valueOf(section.getString("type"));
+        ItemCarrier itemCarrier = ItemCarrier.valueOf(section.getString("type").toUpperCase(Locale.ENGLISH));
         if (itemCarrier != ItemCarrier.TRIPWIRE && itemCarrier != ItemCarrier.ITEM_DISPLAY && itemCarrier != ItemCarrier.ITEM_FRAME) {
             LogUtils.warn("Unsupported crop type: " + itemCarrier.name());
             return;
@@ -1637,14 +1796,8 @@ public class ItemManagerImpl implements ItemManager {
                         return FunctionResult.RETURN;
                     }
                     // place the crop
-                    switch (crop.getItemCarrier()) {
-                        case ITEM_FRAME, ITEM_DISPLAY -> customProvider.placeFurniture(seedLocation, crop.getStageItemByPoint(plantEvent.getPoint()));
-                        case TRIPWIRE -> customProvider.placeBlock(seedLocation, crop.getStageItemByPoint(plantEvent.getPoint()));
-                        default -> {
-                            LogUtils.warn("Unsupported type for crop: " + crop.getItemCarrier().name());
-                            return FunctionResult.RETURN;
-                        }
-                    }
+                    this.placeItem(seedLocation, crop.getItemCarrier(), crop.getStageItemByPoint(plantEvent.getPoint()), crop.hasRotation() ? CRotation.RANDOM : CRotation.NONE);
+
                     // reduce item
                     if (player.getGameMode() != GameMode.CREATIVE)
                         itemInHand.setAmount(itemInHand.getAmount() - 1);
@@ -1666,8 +1819,9 @@ public class ItemManagerImpl implements ItemManager {
                             if (!(conditionWrapper instanceof InteractWrapper interactWrapper)) {
                                 return FunctionResult.PASS;
                             }
-                            Location cropLocation = interactWrapper.getLocation().toBlockLocation();
+
                             Player player = interactWrapper.getPlayer();
+                            Location cropLocation = interactWrapper.getLocation().toBlockLocation();
                             ItemStack itemInHand = interactWrapper.getItemInHand();
                             State cropState = new State(player, itemInHand, cropLocation);
 
@@ -1682,7 +1836,9 @@ public class ItemManagerImpl implements ItemManager {
                             Optional<WorldCrop> optionalCrop = plugin.getWorldManager().getCropAt(simpleLocation);
                             if (optionalCrop.isEmpty()) {
                                 plugin.debug("Found a crop without data interacted by " + player.getName() + " at " + cropLocation);
-                                plugin.getWorldManager().addCropAt(new MemoryCrop(simpleLocation, crop.getKey(), stage.getPoint()), simpleLocation);
+                                WorldCrop newCrop = new MemoryCrop(simpleLocation, crop.getKey(), stage.getPoint());
+                                plugin.getWorldManager().addCropAt(newCrop, simpleLocation);
+                                optionalCrop = Optional.of(newCrop);
                             } else {
                                 if (!optionalCrop.get().getKey().equals(crop.getKey())) {
                                     LogUtils.warn("Found a crop having inconsistent data interacted by " + player.getName() + " at " + cropLocation + ".");
@@ -1732,25 +1888,28 @@ public class ItemManagerImpl implements ItemManager {
                             }
 
                             // if not reached the max point, try detecting bone meals
-                            if (optionalCrop.isPresent()) {
-                                if (optionalCrop.get().getPoint() < crop.getMaxPoints()) {
-                                    for (BoneMeal boneMeal : crop.getBoneMeals()) {
-                                        if (boneMeal.getItem().equals(itemID)) {
-                                            if (player.getGameMode() != GameMode.CREATIVE) {
-                                                itemInHand.setAmount(itemAmount - boneMeal.getUsedAmount());
-                                                if (boneMeal.getReturned() != null) {
-                                                    ItemStack returned = getItemStack(player, boneMeal.getReturned());
-                                                    ItemUtils.giveItem(player, returned, boneMeal.getReturnedAmount());
-                                                }
+                            if (optionalCrop.get().getPoint() < crop.getMaxPoints()) {
+                                for (BoneMeal boneMeal : crop.getBoneMeals()) {
+                                    if (boneMeal.getItem().equals(itemID)) {
+                                        // fire the event
+                                        BoneMealUseEvent useEvent = new BoneMealUseEvent(player, itemInHand, cropLocation, boneMeal, optionalCrop.get());
+                                        if (EventUtils.fireAndCheckCancel(useEvent))
+                                            return FunctionResult.CANCEL_EVENT_AND_RETURN;
+
+                                        if (player.getGameMode() != GameMode.CREATIVE) {
+                                            itemInHand.setAmount(itemAmount - boneMeal.getUsedAmount());
+                                            if (boneMeal.getReturned() != null) {
+                                                ItemStack returned = getItemStack(player, boneMeal.getReturned());
+                                                ItemUtils.giveItem(player, returned, boneMeal.getReturnedAmount());
                                             }
-                                            boneMeal.trigger(cropState);
-                                            plugin.getWorldManager().addPointToCrop(crop, SimpleLocation.of(cropLocation), boneMeal.getPoint());
-                                            return FunctionResult.RETURN;
                                         }
+                                        boneMeal.trigger(cropState);
+                                        plugin.getWorldManager().addPointToCrop(crop, SimpleLocation.of(cropLocation), boneMeal.getPoint());
+                                        return FunctionResult.RETURN;
                                     }
-                                } else {
-                                    crop.trigger(ActionTrigger.RIPE, cropState);
                                 }
+                            } else {
+                                crop.trigger(ActionTrigger.RIPE, cropState);
                             }
 
                             // trigger interact actions
@@ -1781,6 +1940,9 @@ public class ItemManagerImpl implements ItemManager {
                             SimpleLocation simpleLocation = SimpleLocation.of(cropLocation);
                             Optional<WorldCrop> optionalWorldCrop = plugin.getWorldManager().getCropAt(simpleLocation);
                             if (optionalWorldCrop.isEmpty()) {
+                                WorldCrop worldCrop = new MemoryCrop(simpleLocation, crop.getKey(), stage.getPoint());
+                                plugin.getWorldManager().addCropAt(worldCrop, simpleLocation);
+                                optionalWorldCrop = Optional.of(worldCrop);
                                 plugin.debug("Found a crop without data broken by " + player.getName() + " at " + cropLocation + ". " +
                                         "You can safely ignore this if the crop is spawned in the wild.");
                             } else {
@@ -1791,7 +1953,7 @@ public class ItemManagerImpl implements ItemManager {
                                 }
                             }
                             // fire event
-                            CropBreakEvent breakEvent = new CropBreakEvent(player, cropLocation, optionalWorldCrop.orElse(null));
+                            CropBreakEvent breakEvent = new CropBreakEvent(player, cropLocation, optionalWorldCrop.get(), Reason.BREAK);
                             if (EventUtils.fireAndCheckCancel(breakEvent))
                                 return FunctionResult.CANCEL_EVENT_AND_RETURN;
                             // trigger actions
@@ -1813,7 +1975,7 @@ public class ItemManagerImpl implements ItemManager {
         boolean enableFertilizedAppearance = section.getBoolean("fertilized-pots.enable", false);
 
         PotConfig pot = new PotConfig(
-                key, storage, section.getBoolean("absorb-rainwater", true), section.getBoolean("absorb-nearby-water", false),
+                key, storage, section.getBoolean("absorb-rainwater", false), section.getBoolean("absorb-nearby-water", false),
                 dryModel, wetModel,
                 enableFertilizedAppearance,
                 enableFertilizedAppearance ? ConfigUtils.getFertilizedPotMap(section.getConfigurationSection("fertilized-pots")) : new HashMap<>(),
@@ -1857,14 +2019,20 @@ public class ItemManagerImpl implements ItemManager {
                         Optional<WorldPot> optionalPot = plugin.getWorldManager().getPotAt(simpleLocation);
                         if (optionalPot.isEmpty()) {
                             plugin.debug("Found a pot without data interacted by " + player.getName() + " at " + location);
-                            plugin.getWorldManager().addPotAt(new MemoryPot(simpleLocation, pot.getKey()), simpleLocation);
-                            return FunctionResult.RETURN;
+                            WorldPot newPot = new MemoryPot(simpleLocation, pot.getKey());
+                            if (pot.isWetPot(potItemID)) {
+                                newPot.setWater(1);
+                            }
+                            plugin.getWorldManager().addPotAt(newPot, simpleLocation);
+                            optionalPot = Optional.of(newPot);
+                        } else {
+                            if (!optionalPot.get().getKey().equals(pot.getKey())) {
+                                LogUtils.warn("Found a pot having inconsistent data interacted by " + player.getName() + " at " + location + ".");
+                                plugin.getWorldManager().addPotAt(new MemoryPot(simpleLocation, pot.getKey()), simpleLocation);
+                                return FunctionResult.RETURN;
+                            }
                         }
-                        if (!optionalPot.get().getKey().equals(pot.getKey())) {
-                            LogUtils.warn("Found a pot having inconsistent data interacted by " + player.getName() + " at " + location + ".");
-                            plugin.getWorldManager().addPotAt(new MemoryPot(simpleLocation, pot.getKey()), simpleLocation);
-                            return FunctionResult.RETURN;
-                        }
+
                         // fire the event
                         PotInteractEvent interactEvent = new PotInteractEvent(player, itemInHand, location, optionalPot.get());
                         if (EventUtils.fireAndCheckCancel(interactEvent)) {
@@ -1878,6 +2046,11 @@ public class ItemManagerImpl implements ItemManager {
                             if (method.getUsed().equals(itemID) && itemAmount >= method.getUsedAmount()) {
                                 if (method.canFill(state)) {
                                     if (waterInPot < pot.getStorage()) {
+                                        // fire the event
+                                        PotFillEvent waterEvent = new PotFillEvent(player, itemInHand, location, method, optionalPot.get());
+                                        if (EventUtils.fireAndCheckCancel(waterEvent))
+                                            return FunctionResult.CANCEL_EVENT_AND_RETURN;
+
                                         if (player.getGameMode() != GameMode.CREATIVE) {
                                             itemInHand.setAmount(itemAmount - method.getUsedAmount());
                                             if (method.getReturned() != null) {
@@ -1957,23 +2130,27 @@ public class ItemManagerImpl implements ItemManager {
                                 if (!RequirementManager.isRequirementMet(cropState, stage.getBreakRequirements())) {
                                     return FunctionResult.CANCEL_EVENT_AND_RETURN;
                                 }
-                                Optional<WorldCrop> optionalWorldCrop = plugin.getWorldManager().getCropAt(SimpleLocation.of(cropLocation));
+                                SimpleLocation simpleLocation = SimpleLocation.of(cropLocation);
+                                Optional<WorldCrop> optionalWorldCrop = plugin.getWorldManager().getCropAt(simpleLocation);
                                 if (optionalWorldCrop.isPresent()) {
                                     if (!optionalWorldCrop.get().getKey().equals(crop.getKey())) {
                                         LogUtils.warn("Found a crop having inconsistent data broken by " + player.getName() + " at " + cropLocation + ".");
                                     }
                                 } else {
+                                    WorldCrop worldCrop = new MemoryCrop(simpleLocation, crop.getKey(), stage.getPoint());
+                                    optionalWorldCrop = Optional.of(worldCrop);
+                                    plugin.getWorldManager().addCropAt(worldCrop, simpleLocation);
                                     plugin.debug("Found a crop without data broken by " + player.getName() + " at " + cropLocation + ". " +
                                             "You can safely ignore this if the crop is spawned in the wild.");
                                 }
                                 // fire event
-                                CropBreakEvent breakEvent = new CropBreakEvent(player, cropLocation, optionalWorldCrop.orElse(null));
+                                CropBreakEvent breakEvent = new CropBreakEvent(player, cropLocation, optionalWorldCrop.get(), Reason.BREAK);
                                 if (EventUtils.fireAndCheckCancel(breakEvent))
                                     return FunctionResult.CANCEL_EVENT_AND_RETURN;
                                 // trigger actions
                                 stage.trigger(ActionTrigger.BREAK, cropState);
                                 crop.trigger(ActionTrigger.BREAK, cropState);
-                                plugin.getWorldManager().removeCropAt(SimpleLocation.of(cropLocation));
+                                plugin.getWorldManager().removeCropAt(simpleLocation);
                                 customProvider.removeAnythingAt(cropLocation);
                             } else {
                                 LogUtils.warn("Invalid crop stage: " + cropStageID);
@@ -1988,16 +2165,16 @@ public class ItemManagerImpl implements ItemManager {
                         SimpleLocation simpleLocation = SimpleLocation.of(location);
                         Optional<WorldPot> optionalPot = plugin.getWorldManager().getPotAt(simpleLocation);
                         if (optionalPot.isEmpty()) {
-                            LogUtils.warn("Found a pot without data broken by " + state.getPlayer().getName() + " at " + simpleLocation);
+                            plugin.debug("Found a pot without data broken by " + state.getPlayer().getName() + " at " + simpleLocation);
                             return FunctionResult.RETURN;
                         }
                         if (!optionalPot.get().getKey().equals(pot.getKey())) {
-                            LogUtils.warn("Found a pot having inconsistent data broken by " + state.getPlayer().getName() + " at " + simpleLocation + ".");
+                            plugin.debug("Found a pot having inconsistent data broken by " + state.getPlayer().getName() + " at " + simpleLocation + ".");
                             plugin.getWorldManager().removePotAt(simpleLocation);
                             return FunctionResult.RETURN;
                         }
                         // fire event
-                        PotBreakEvent breakEvent = new PotBreakEvent(blockWrapper.getPlayer(), location, optionalPot.get());
+                        PotBreakEvent breakEvent = new PotBreakEvent(blockWrapper.getPlayer(), location, optionalPot.get(), Reason.BREAK);
                         if (EventUtils.fireAndCheckCancel(breakEvent)) {
                             return FunctionResult.CANCEL_EVENT_AND_RETURN;
                         }
@@ -2042,7 +2219,16 @@ public class ItemManagerImpl implements ItemManager {
         }
     }
 
+    private void registerItemFunction(String[] items, FunctionTrigger trigger, CFunction... function) {
+        for (String item : items) {
+            if (item != null) {
+                registerItemFunction(item, trigger, function);
+            }
+        }
+    }
+
     private void registerItemFunction(String item, FunctionTrigger trigger, CFunction... function) {
+        if (item == null) return;
         if (itemID2FunctionMap.containsKey(item)) {
             var previous = itemID2FunctionMap.get(item);
             TreeSet<CFunction> previousFunctions = previous.get(trigger);
@@ -2109,17 +2295,16 @@ public class ItemManagerImpl implements ItemManager {
     public void handlePlayerBreakBlock(
             Player player,
             Block brokenBlock,
+            String blockID,
             Cancellable event
     ) {
         if (!plugin.getWorldManager().isMechanicEnabled(player.getWorld()))
             return;
 
-        /*
-          No need to check anti-grief here as the event should be cancelled by the anti-grief plugin
-         */
+        // check anti-grief
+        if (!antiGrief.canBreak(player, brokenBlock.getLocation()))
+            return;
 
-        // check blocks, no need to check item in hand
-        String blockID = customProvider.getBlockID(brokenBlock);
         Optional.ofNullable(itemID2FunctionMap.get(blockID))
                 .map(map -> map.get(FunctionTrigger.BREAK))
                 .ifPresent(cFunctions -> handleFunctions(cFunctions, new BreakBlockWrapper(player, brokenBlock), event));
@@ -2162,9 +2347,9 @@ public class ItemManagerImpl implements ItemManager {
         if (!plugin.getWorldManager().isMechanicEnabled(player.getWorld()))
             return;
 
-         /*
-          No need to check anti-grief here as the event should be cancelled by the anti-grief plugin
-         */
+        // check anti-grief
+        if (!antiGrief.canPlace(player, location))
+            return;
 
         // check furniture, no need to check item in hand
         Optional.ofNullable(itemID2FunctionMap.get(id))
@@ -2181,9 +2366,9 @@ public class ItemManagerImpl implements ItemManager {
         if (!plugin.getWorldManager().isMechanicEnabled(player.getWorld()))
             return;
 
-         /*
-          No need to check anti-grief here as the event should be handled by ItemsAdder/Oraxen
-         */
+        // check anti-grief
+        if (!antiGrief.canBreak(player, location))
+            return;
 
         // check furniture, no need to check item in hand
         Optional.ofNullable(itemID2FunctionMap.get(id))
@@ -2195,9 +2380,9 @@ public class ItemManagerImpl implements ItemManager {
         if (!plugin.getWorldManager().isMechanicEnabled(player.getWorld()))
             return;
 
-         /*
-          No need to check anti-grief here as the event should be cancelled by the anti-grief plugin
-         */
+        // check anti-grief
+        if (!antiGrief.canPlace(player, block.getLocation()))
+            return;
 
         // check furniture, no need to check item in hand
         Optional.ofNullable(itemID2FunctionMap.get(blockID))
@@ -2205,51 +2390,143 @@ public class ItemManagerImpl implements ItemManager {
                 .ifPresent(cFunctions -> handleFunctions(cFunctions, new PlaceBlockWrapper(player, block, blockID), event));
     }
 
-    public void handleEntityBreakBlock(Entity entity, Block block, Cancellable event) {
+    public void handleEntityTramplingBlock(Entity entity, Block block, Cancellable event) {
         if (entity instanceof Player player) {
-            handlePlayerBreakBlock(player, block, event);
+            handlePlayerBreakBlock(player, block, "FARMLAND", event);
         } else {
+            // if the block is a pot
             Pot pot = getPotByBlock(block);
             if (pot != null) {
-                // prevent entities from breaking pots with requirements
-                if (pot.getBreakRequirements().length != 0) {
+                Location potLocation = block.getLocation();
+                // get or fix pot
+                SimpleLocation potSimpleLocation = SimpleLocation.of(potLocation);
+                Optional<WorldPot> worldPot = plugin.getWorldManager().getPotAt(potSimpleLocation);
+                if (worldPot.isEmpty()) {
+                    plugin.debug("Found pot data not exists at " + potSimpleLocation + ". Fixing it.");
+                    MemoryPot memoryPot = new MemoryPot(potSimpleLocation, pot.getKey());
+                    plugin.getWorldManager().addPotAt(memoryPot, potSimpleLocation);
+                    worldPot = Optional.of(memoryPot);
+                }
+                // fire the event
+                PotBreakEvent potBreakEvent = new PotBreakEvent(entity, potLocation, worldPot.get(), Reason.TRAMPLE);
+                if (EventUtils.fireAndCheckCancel(potBreakEvent)) {
                     event.setCancelled(true);
                     return;
                 }
+
+                plugin.getWorldManager().removePotAt(SimpleLocation.of(block.getLocation()));
+                pot.trigger(ActionTrigger.BREAK, new State(null, new ItemStack(Material.AIR), block.getLocation()));
 
                 Location cropLocation = block.getLocation().clone().add(0,1,0);
                 String cropStageID = customProvider.getSomethingAt(cropLocation);
                 Crop.Stage stage = stage2CropStageMap.get(cropStageID);
                 if (stage != null) {
-                    //State state = new State(null, new ItemStack(Material.AIR), cropLocation);
-                    // if crops are above, check the break requirements for crops
                     Crop crop = getCropByStageID(cropStageID);
-                    if (crop.getBreakRequirements().length != 0 || stage.getBreakRequirements().length != 0) {
-                        event.setCancelled(true);
-                        return;
-                    }
-                    Optional<WorldCrop> optionalWorldCrop = plugin.getWorldManager().getCropAt(SimpleLocation.of(cropLocation));
+                    SimpleLocation simpleLocation = SimpleLocation.of(cropLocation);
+                    Optional<WorldCrop> optionalWorldCrop = plugin.getWorldManager().getCropAt(simpleLocation);
                     if (optionalWorldCrop.isPresent()) {
                         if (!optionalWorldCrop.get().getKey().equals(crop.getKey())) {
                             LogUtils.warn("Found a crop having inconsistent data broken by " + entity.getType() + " at " + cropLocation + ".");
                         }
                     } else {
+                        WorldCrop worldCrop = new MemoryCrop(simpleLocation, crop.getKey(), stage.getPoint());
+                        plugin.getWorldManager().addCropAt(worldCrop, simpleLocation);
+                        optionalWorldCrop = Optional.of(worldCrop);
                         plugin.debug("Found a crop without data broken by " + entity.getType() + " at " + cropLocation + ". " +
                                 "You can safely ignore this if the crop is spawned in the wild.");
                     }
+                    // fire the event
+                    CropBreakEvent breakEvent = new CropBreakEvent(entity, cropLocation, optionalWorldCrop.get(), Reason.TRAMPLE);
+                    if (EventUtils.fireAndCheckCancel(breakEvent)) {
+                        event.setCancelled(true);
+                        return;
+                    }
+
+                    State state = new State(null, new ItemStack(Material.AIR), cropLocation);
                     // trigger actions
-                    //stage.trigger(ActionTrigger.BREAK, state);
-                    //crop.trigger(ActionTrigger.BREAK, state);
-                    plugin.getWorldManager().removeCropAt(SimpleLocation.of(cropLocation));
+                    stage.trigger(ActionTrigger.BREAK, state);
+                    crop.trigger(ActionTrigger.BREAK, state);
+                    plugin.getWorldManager().removeCropAt(simpleLocation);
                     customProvider.removeAnythingAt(cropLocation);
                 }
 
                 if (deadCrops.contains(cropStageID)) {
                     customProvider.removeAnythingAt(cropLocation);
                 }
+            }
+        }
+    }
 
-                plugin.getWorldManager().removePotAt(SimpleLocation.of(block.getLocation()));
-                //pot.trigger(ActionTrigger.BREAK, new State(null, new ItemStack(Material.AIR), block.getLocation()));
+    public void handleExplosion(Entity entity, List<Block> blocks, Cancellable event) {
+        List<Location> locationsToRemove = new ArrayList<>();
+        List<Location> locationsToRemoveBlock = new ArrayList<>();
+        HashSet<Location> blockLocations = new HashSet<>(blocks.stream().map(Block::getLocation).toList());
+        List<Location> aboveLocations = new ArrayList<>();
+        for (Location location : blockLocations) {
+            Optional<CustomCropsBlock> optionalCustomCropsBlock = plugin.getWorldManager().getBlockAt(SimpleLocation.of(location));
+            if (optionalCustomCropsBlock.isPresent()) {
+                Event customEvent = null;
+                CustomCropsBlock customCropsBlock = optionalCustomCropsBlock.get();
+                switch (customCropsBlock.getType()) {
+                    case POT -> {
+                        customEvent = new PotBreakEvent(entity, location, (WorldPot) customCropsBlock, Reason.EXPLODE);
+                        Location above = location.clone().add(0,1,0);
+                        if (!blockLocations.contains(above)) {
+                            aboveLocations.add(above);
+                        }
+                    }
+                    case SPRINKLER -> customEvent = new SprinklerBreakEvent(entity, location, (WorldSprinkler) customCropsBlock, Reason.EXPLODE);
+                    case CROP -> customEvent = new CropBreakEvent(entity, location, (WorldCrop) customCropsBlock, Reason.EXPLODE);
+                    case GREENHOUSE -> customEvent = new GreenhouseGlassBreakEvent(entity, location, (WorldGlass) customCropsBlock, Reason.EXPLODE);
+                    case SCARECROW -> customEvent = new ScarecrowBreakEvent(entity, location, (WorldScarecrow) customCropsBlock, Reason.EXPLODE);
+                }
+                if (customEvent != null && EventUtils.fireAndCheckCancel(customEvent)) {
+                    event.setCancelled(true);
+                    return;
+                }
+                locationsToRemove.add(location);
+            }
+        }
+
+        for (Location location : aboveLocations) {
+            Optional<CustomCropsBlock> optionalCustomCropsBlock = plugin.getWorldManager().getBlockAt(SimpleLocation.of(location));
+            if (optionalCustomCropsBlock.isPresent()) {
+                CustomCropsBlock customCropsBlock = optionalCustomCropsBlock.get();
+                if (customCropsBlock.getType() == ItemType.CROP) {
+                    if (EventUtils.fireAndCheckCancel(new CropBreakEvent(entity, location, (WorldCrop) customCropsBlock, Reason.EXPLODE))) {
+                        event.setCancelled(true);
+                        return;
+                    }
+                    locationsToRemove.add(location);
+                    locationsToRemoveBlock.add(location);
+                }
+            }
+        }
+
+        for (Location location : locationsToRemoveBlock) {
+            removeAnythingAt(location);
+        }
+
+        for (Location location : locationsToRemove) {
+            CustomCropsBlock customCropsBlock = plugin.getWorldManager().removeAnythingAt(SimpleLocation.of(location));
+            if (customCropsBlock != null) {
+                State state = new State(null, new ItemStack(Material.AIR), location);
+                switch (customCropsBlock.getType()) {
+                    case POT -> {
+                        Pot pot = ((WorldPot) customCropsBlock).getConfig();
+                        pot.trigger(ActionTrigger.BREAK, state);
+                    }
+                    case CROP -> {
+                        Crop crop = ((WorldCrop) customCropsBlock).getConfig();
+                        Crop.Stage stage = crop.getStageByItemID(crop.getStageItemByPoint(((WorldCrop) customCropsBlock).getPoint()));
+                        crop.trigger(ActionTrigger.BREAK, state);
+                        stage.trigger(ActionTrigger.BREAK, state);
+                    }
+                    case SPRINKLER -> {
+                        Sprinkler sprinkler = ((WorldSprinkler) customCropsBlock).getConfig();
+                        sprinkler.trigger(ActionTrigger.BREAK, state);
+                    }
+                }
             }
         }
     }

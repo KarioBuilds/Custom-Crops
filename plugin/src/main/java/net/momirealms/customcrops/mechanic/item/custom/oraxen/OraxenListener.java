@@ -20,7 +20,9 @@ package net.momirealms.customcrops.mechanic.item.custom.oraxen;
 import io.th0rgal.oraxen.api.events.furniture.OraxenFurnitureBreakEvent;
 import io.th0rgal.oraxen.api.events.furniture.OraxenFurnitureInteractEvent;
 import io.th0rgal.oraxen.api.events.furniture.OraxenFurniturePlaceEvent;
+import io.th0rgal.oraxen.api.events.noteblock.OraxenNoteBlockBreakEvent;
 import io.th0rgal.oraxen.api.events.noteblock.OraxenNoteBlockPlaceEvent;
+import io.th0rgal.oraxen.api.events.stringblock.OraxenStringBlockBreakEvent;
 import io.th0rgal.oraxen.api.events.stringblock.OraxenStringBlockPlaceEvent;
 import net.momirealms.customcrops.mechanic.item.ItemManagerImpl;
 import net.momirealms.customcrops.mechanic.item.custom.AbstractCustomListener;
@@ -30,6 +32,26 @@ public class OraxenListener extends AbstractCustomListener {
 
     public OraxenListener(ItemManagerImpl itemManager) {
         super(itemManager);
+    }
+
+    @EventHandler (ignoreCancelled = true)
+    public void onBreakCustomNoteBlock(OraxenNoteBlockBreakEvent event) {
+        this.itemManager.handlePlayerBreakBlock(
+                event.getPlayer(),
+                event.getBlock(),
+                event.getMechanic().getItemID(),
+                event
+        );
+    }
+
+    @EventHandler (ignoreCancelled = true)
+    public void onBreakCustomStringBlock(OraxenStringBlockBreakEvent event) {
+        this.itemManager.handlePlayerBreakBlock(
+                event.getPlayer(),
+                event.getBlock(),
+                event.getMechanic().getItemID(),
+                event
+        );
     }
 
     @EventHandler (ignoreCancelled = true)
@@ -66,7 +88,7 @@ public class OraxenListener extends AbstractCustomListener {
     public void onBreakFurniture(OraxenFurnitureBreakEvent event) {
         super.onBreakFurniture(
                 event.getPlayer(),
-                event.getBlock().getLocation(),
+                event.getBaseEntity().getLocation().toBlockLocation(),
                 event.getMechanic().getItemID(),
                 event
         );
@@ -76,7 +98,7 @@ public class OraxenListener extends AbstractCustomListener {
     public void onInteractFurniture(OraxenFurnitureInteractEvent event) {
         super.onInteractFurniture(
                 event.getPlayer(),
-                event.getBlock().getLocation(),
+                event.getBaseEntity().getLocation().toBlockLocation(),
                 event.getMechanic().getItemID(),
                 event.getBaseEntity(),
                 event

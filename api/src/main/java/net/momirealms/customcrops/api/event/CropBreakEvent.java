@@ -17,33 +17,39 @@
 
 package net.momirealms.customcrops.api.event;
 
+import net.momirealms.customcrops.api.mechanic.misc.Reason;
 import net.momirealms.customcrops.api.mechanic.world.level.WorldCrop;
 import org.bukkit.Location;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Cancellable;
+import org.bukkit.event.Event;
 import org.bukkit.event.HandlerList;
-import org.bukkit.event.player.PlayerEvent;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
  * An event that triggered when breaking a crop
  */
-public class CropBreakEvent extends PlayerEvent implements Cancellable {
+public class CropBreakEvent extends Event implements Cancellable {
 
     private static final HandlerList handlers = new HandlerList();
     private boolean cancelled;
     private final Location location;
     private final WorldCrop worldCrop;
+    private final Entity entity;
+    private final Reason reason;
 
     public CropBreakEvent(
-            @NotNull Player player,
+            @Nullable Entity entity,
             @NotNull Location location,
-            @Nullable WorldCrop worldCrop
+            @NotNull WorldCrop worldCrop,
+            @NotNull Reason reason
     ) {
-        super(player);
+        this.entity = entity;
         this.location = location;
         this.worldCrop = worldCrop;
+        this.reason = reason;
     }
 
     @Override
@@ -83,5 +89,23 @@ public class CropBreakEvent extends PlayerEvent implements Cancellable {
     @NotNull
     public Location getLocation() {
         return location;
+    }
+
+    @Nullable
+    public Entity getEntity() {
+        return entity;
+    }
+
+    @Nullable
+    public Player getPlayer() {
+        if (entity instanceof Player player) {
+            return player;
+        }
+        return null;
+    }
+
+    @NotNull
+    public Reason getReason() {
+        return reason;
     }
 }

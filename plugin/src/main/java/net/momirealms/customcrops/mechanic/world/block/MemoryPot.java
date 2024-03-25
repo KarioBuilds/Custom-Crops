@@ -52,6 +52,14 @@ public class MemoryPot extends AbstractCustomCropsBlock implements WorldPot {
         setData("fertilizer-times", new IntTag("fertilizer-times", 0));
     }
 
+    public MemoryPot(SimpleLocation location, String key, int water, String fertilizer, int fertilizerTimes) {
+        super(location, new CompoundMap());
+        setData("key", new StringTag("key", key));
+        setData("water", new IntTag("water", water));
+        setData("fertilizer", new StringTag("fertilizer", fertilizer));
+        setData("fertilizer-times", new IntTag("fertilizer-times", fertilizerTimes));
+    }
+
     @Override
     public String getKey() {
         return getData("key").getAsStringTag()
@@ -66,6 +74,11 @@ public class MemoryPot extends AbstractCustomCropsBlock implements WorldPot {
 
     @Override
     public void setWater(int water) {
+        if (water < 0) return;
+        int max = getConfig().getStorage();
+        if (water > max) {
+            water = max;
+        }
         setData("water", new IntTag("water", water));
     }
 

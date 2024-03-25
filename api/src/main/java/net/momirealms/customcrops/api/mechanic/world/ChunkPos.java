@@ -17,71 +17,71 @@
 
 package net.momirealms.customcrops.api.mechanic.world;
 
-import java.util.Objects;
+import org.bukkit.Chunk;
+import org.jetbrains.annotations.NotNull;
 
-public class ChunkPos {
+public record ChunkPos(int x, int z) {
 
-    private final int position;
-
-    public ChunkPos(int position) {
-        this.position = position;
+    public static ChunkPos of(int x, int z) {
+        return new ChunkPos(x, z);
     }
 
-    public ChunkPos(int x, int y, int z) {
-        this.position = ((x & 0xF) << 28) | ((z & 0xF) << 24) | (y & 0xFFFFFF);
-    }
-
-    public static ChunkPos getByLocation(SimpleLocation location) {
-        return new ChunkPos(location.getX() % 16, location.getY(), location.getZ() % 16);
-    }
-
-    public SimpleLocation getLocation(String world, ChunkCoordinate coordinate) {
-        return new SimpleLocation(world, coordinate.x() * 16 + getX(), getY(), coordinate.z() * 16 + getZ());
-    }
-
-    public int getPosition() {
-        return position;
-    }
-
-    public int getX() {
-        return (position >> 28) & 0xF;
-    }
-
-    public int getZ() {
-        return (position >> 24) & 0xF;
-    }
-
-    public int getSectionID() {
-        return getY() / 16;
-    }
-
-    public int getY() {
-        int y = position & 0xFFFFFF;
-        if ((y & 0x800000) != 0) {
-            y |= 0xFF000000;
+    public static ChunkPos getByString(String coordinate) {
+        String[] split = coordinate.split(",", 2);
+        try {
+            int x = Integer.parseInt(split[0]);
+            int z = Integer.parseInt(split[1]);
+            return new ChunkPos(x, z);
         }
-        return y;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        ChunkPos chunkPos = (ChunkPos) o;
-        return position == chunkPos.position;
+        catch (NumberFormatException e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(position);
+        long combined = (long) x << 32 | z;
+        return Long.hashCode(combined);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (obj == null) {
+            return false;
+        }
+        if (getClass() != obj.getClass()) {
+            return false;
+        }
+        final ChunkPos other = (ChunkPos) obj;
+        if (this.x != other.x) {
+            return false;
+        }
+        if (this.z != other.z) {
+            return false;
+        }
+        return true;
+    }
+
+    @NotNull
+    public RegionPos getRegionPos() {
+        return RegionPos.getByChunkPos(this);
+    }
+
+    @NotNull
+    public static ChunkPos getByBukkitChunk(@NotNull Chunk chunk) {
+        return new ChunkPos(chunk.getX(), chunk.getZ());
+    }
+
+    public String getAsString() {
+        return x + "," + z;
     }
 
     @Override
     public String toString() {
         return "ChunkPos{" +
-                "x=" + getX() +
-                "y=" + getY() +
-                "z=" + getZ() +
+                "x=" + x +
+                ", z=" + z +
                 '}';
     }
 }

@@ -15,15 +15,34 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package net.momirealms.customcrops.utils;
+package net.momirealms.customcrops.api.object.crop;
 
-import java.util.concurrent.ThreadLocalRandom;
+import java.io.Serial;
+import java.io.Serializable;
 
-public class RandomUtils {
+@Deprecated
+public class GrowingCrop implements Serializable {
 
-    private static final ThreadLocalRandom randomSource = ThreadLocalRandom.current();
+    @Serial
+    private static final long serialVersionUID = 2828962866548871991L;
 
-    public static int getRandomInt(int from, int to) {
-        return randomSource.nextInt(from, to);
+    private int points;
+    private final String crop;
+
+    public GrowingCrop(String crop, int points) {
+        this.points = points;
+        this.crop = crop;
+    }
+
+    public int getPoints() {
+        return points;
+    }
+
+    public void setPoints(int points) {
+        this.points = points;
+    }
+
+    public String getKey() {
+        return crop;
     }
 }

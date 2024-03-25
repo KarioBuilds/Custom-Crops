@@ -39,6 +39,24 @@ public abstract class VersionManager {
         return instance.isVersionNewerThan1_19_R2();
     }
 
+    public static boolean isHigherThan1_18() {
+        return instance.isVersionNewerThan1_18();
+    }
+
+    public static boolean isHigherThan1_19() {
+        return instance.isVersionNewerThan1_19();
+    }
+
+    public static boolean isHigherThan1_20() {
+        return instance.isVersionNewerThan1_20();
+    }
+
+    public static boolean isHigherThan1_20_R2() {
+        return instance.isVersionNewerThan1_20_R2();
+    }
+
+    public abstract boolean isVersionNewerThan1_20_R2();
+
     public abstract boolean hasRegionScheduler();
 
     public static boolean folia() {
@@ -70,6 +88,8 @@ public abstract class VersionManager {
     public abstract boolean isVersionNewerThan1_19_R2();
 
     public abstract boolean isVersionNewerThan1_20();
+
+    public abstract boolean isVersionNewerThan1_18();
 
     public abstract boolean isMojmap();
 

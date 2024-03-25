@@ -21,15 +21,21 @@ import dev.jorel.commandapi.*;
 import dev.jorel.commandapi.arguments.ArgumentSuggestions;
 import dev.jorel.commandapi.arguments.IntegerArgument;
 import dev.jorel.commandapi.arguments.StringArgument;
-import dev.jorel.commandapi.arguments.WorldArgument;
 import net.momirealms.customcrops.api.CustomCropsPlugin;
 import net.momirealms.customcrops.api.common.Initable;
 import net.momirealms.customcrops.api.integration.SeasonInterface;
+import net.momirealms.customcrops.api.manager.ConfigManager;
 import net.momirealms.customcrops.api.manager.MessageManager;
+import net.momirealms.customcrops.api.mechanic.item.ItemType;
+import net.momirealms.customcrops.api.mechanic.world.CustomCropsBlock;
+import net.momirealms.customcrops.api.mechanic.world.level.CustomCropsChunk;
+import net.momirealms.customcrops.api.mechanic.world.level.CustomCropsSection;
 import net.momirealms.customcrops.api.mechanic.world.level.CustomCropsWorld;
 import net.momirealms.customcrops.api.mechanic.world.season.Season;
 import net.momirealms.customcrops.compatibility.season.InBuiltSeason;
+import org.bukkit.Bukkit;
 import org.bukkit.World;
+import org.bukkit.generator.WorldInfo;
 
 import java.util.Locale;
 import java.util.Optional;
@@ -54,8 +60,8 @@ public class CommandManager implements Initable {
                         getReloadCommand(),
                         getAboutCommand(),
                         getSeasonCommand(),
-                        getDateCommand()
-                        //getStressTest()
+                        getDateCommand(),
+                        getForceTickCommand()
                 )
                 .register();
     }
@@ -85,20 +91,69 @@ public class CommandManager implements Initable {
         });
     }
 
+    private CommandAPICommand getForceTickCommand() {
+        return new CommandAPICommand("force-tick")
+                .withArguments(new StringArgument("world").replaceSuggestions(ArgumentSuggestions.strings(commandSenderSuggestionInfo -> Bukkit.getWorlds().stream().map(WorldInfo::getName).toList().toArray(new String[0]))))
+                .withArguments(new StringArgument("type").replaceSuggestions(ArgumentSuggestions.strings("sprinkler", "crop", "pot", "scarecrow", "greenhouse")))
+                .executes((sender, args) -> {
+                    String worldName = (String) args.get("world");
+                    World world = Bukkit.getWorld(worldName);
+                    if (world == null) {
+                        plugin.getAdventure().sendMessageWithPrefix(sender, "CustomCrops is not enabled in that world");
+                        return;
+                    }
+                    ItemType itemType = ItemType.valueOf(((String) args.get("type")).toUpperCase(Locale.ENGLISH));
+                    Optional<CustomCropsWorld> customCropsWorld = plugin.getWorldManager().getCustomCropsWorld(world);
+                    if (customCropsWorld.isEmpty()) {
+                        plugin.getAdventure().sendMessageWithPrefix(sender, "CustomCrops is not enabled in that world");
+                        return;
+                    }
+                    plugin.getScheduler().runTaskAsync(() -> {
+                        for (CustomCropsChunk chunk : customCropsWorld.get().getChunkStorage()) {
+                            for (CustomCropsSection section : chunk.getSections()) {
+                                for (CustomCropsBlock block : section.getBlocks()) {
+                                    if (block.getType() == itemType) {
+                                        block.tick(1);
+                                    }
+                                }
+                            }
+                        }
+                    });
+                });
+    }
+
     private CommandAPICommand getDateCommand() {
         return new CommandAPICommand("date")
                 .withSubcommands(
                         new CommandAPICommand("get")
-                                .withArguments(new WorldArgument("world"))
+                                .withArguments(new StringArgument("world").replaceSuggestions(ArgumentSuggestions.strings(commandSenderSuggestionInfo -> plugin.getWorldManager().getCustomCropsWorlds().stream()
+                                        .filter(customCropsWorld -> customCropsWorld.getWorldSetting().isEnableSeason())
+                                        .map(CustomCropsWorld::getWorldName)
+                                        .toList()
+                                        .toArray(new String[0]))))
                                 .executes((sender, args) -> {
-                                    World world = (World) args.get("world");
+                                    String worldName = (String) args.get("world");
+                                    World world = Bukkit.getWorld(worldName);
+                                    if (world == null) {
+                                        plugin.getAdventure().sendMessageWithPrefix(sender, "CustomCrops is not enabled in that world");
+                                        return;
+                                    }
                                     plugin.getAdventure().sendMessageWithPrefix(sender, String.valueOf(plugin.getIntegrationManager().getDate(world)));
                                 }),
                         new CommandAPICommand("set")
-                                .withArguments(new WorldArgument("world"))
+                                .withArguments(new StringArgument("world").replaceSuggestions(ArgumentSuggestions.strings(commandSenderSuggestionInfo -> plugin.getWorldManager().getCustomCropsWorlds().stream()
+                                        .filter(customCropsWorld -> customCropsWorld.getWorldSetting().isEnableSeason())
+                                        .map(CustomCropsWorld::getWorldName)
+                                        .toList()
+                                        .toArray(new String[0]))))
                                 .withArguments(new IntegerArgument("date",1))
                                 .executes((sender, args) -> {
-                                    World world = (World) args.get("world");
+                                    String worldName = (String) args.get("world");
+                                    World world = Bukkit.getWorld(worldName);
+                                    if (world == null) {
+                                        plugin.getAdventure().sendMessageWithPrefix(sender, "CustomCrops is not enabled in that world");
+                                        return;
+                                    }
                                     int date = (int) args.getOrDefault("date", 1);
                                     SeasonInterface seasonInterface = plugin.getIntegrationManager().getSeasonInterface();
                                     if (!(seasonInterface instanceof InBuiltSeason inBuiltSeason)) {
@@ -129,13 +184,31 @@ public class CommandManager implements Initable {
         return new CommandAPICommand("season")
                 .withSubcommands(
                         new CommandAPICommand("get")
-                                .withArguments(new WorldArgument("world"))
+                                .withArguments(new StringArgument("world").replaceSuggestions(ArgumentSuggestions.strings(commandSenderSuggestionInfo -> plugin.getWorldManager().getCustomCropsWorlds().stream()
+                                        .filter(customCropsWorld -> customCropsWorld.getWorldSetting().isEnableSeason())
+                                        .map(CustomCropsWorld::getWorldName)
+                                        .toList()
+                                        .toArray(new String[0]))))
                                 .executes((sender, args) -> {
-                                    World world = (World) args.get("world");
+                                    String worldName = (String) args.get("world");
+                                    World world = Bukkit.getWorld(worldName);
+                                    if (world == null) {
+                                        plugin.getAdventure().sendMessageWithPrefix(sender, "CustomCrops is not enabled in that world");
+                                        return;
+                                    }
                                     plugin.getAdventure().sendMessageWithPrefix(sender, MessageManager.seasonTranslation(plugin.getIntegrationManager().getSeason(world)));
                                 }),
                         new CommandAPICommand("set")
-                                .withArguments(new WorldArgument("world"))
+                                .withArguments(new StringArgument("world").replaceSuggestions(ArgumentSuggestions.strings(commandSenderSuggestionInfo -> {
+                                            if (ConfigManager.syncSeasons()) {
+                                                return new String[]{ConfigManager.referenceWorld().getName()};
+                                            }
+                                            return plugin.getWorldManager().getCustomCropsWorlds().stream()
+                                                    .filter(customCropsWorld -> customCropsWorld.getWorldSetting().isEnableSeason())
+                                                    .map(CustomCropsWorld::getWorldName)
+                                                    .toList()
+                                                    .toArray(new String[0]);
+                                        })))
                                 .withArguments(new StringArgument("season")
                                         .replaceSuggestions(ArgumentSuggestions.stringsWithTooltips(info ->
                                                 new IStringTooltip[] {
@@ -147,7 +220,12 @@ public class CommandManager implements Initable {
                                         ))
                                 )
                                 .executes((sender, args) -> {
-                                    World world = (World) args.get("world");
+                                    String worldName = (String) args.get("world");
+                                    World world = Bukkit.getWorld(worldName);
+                                    if (world == null) {
+                                        plugin.getAdventure().sendMessageWithPrefix(sender, "CustomCrops is not enabled in that world");
+                                        return;
+                                    }
                                     String seasonName = (String) args.get("season");
 
                                     SeasonInterface seasonInterface = plugin.getIntegrationManager().getSeasonInterface();
@@ -176,45 +254,4 @@ public class CommandManager implements Initable {
                                 })
                 );
     }
-
-//    private CommandAPICommand getStressTest() {
-//        return new CommandAPICommand("test").executes((sender, args) -> {
-//            for (int i = 0; i < 16; i++) {
-//                for (int j = 0; j < 16; j++) {
-//                    for (int k = -64; k < 0; k++) {
-//                        SimpleLocation location = new SimpleLocation("world", 1024 + i, k, 1024 + j);
-//                        plugin.getWorldManager().addCropAt(new MemoryCrop(location, "tomato", 0), location);
-//                    }
-//                    for (int k = 1; k < 64; k++) {
-//                        SimpleLocation location = new SimpleLocation("world", 1024 + i, k, 1024 + j);
-//                        plugin.getWorldManager().addCropAt(new MemoryCrop(location, "tomato", 1), location);
-//                    }
-//                    for (int k = 65; k < 128; k++) {
-//                        SimpleLocation location = new SimpleLocation("world", 1024 + i, k, 1024 + j);
-//                        plugin.getWorldManager().addCropAt(new MemoryCrop(location, "tomato", 2), location);
-//                    }
-//                    for (int k = 129; k < 165; k++) {
-//                        SimpleLocation location = new SimpleLocation("world", 1024 + i, k, 1024 + j);
-//                        plugin.getWorldManager().addPotAt(new MemoryPot(location, "default"), location);
-//                    }
-//                    for (int k = 166; k < 190; k++) {
-//                        SimpleLocation location = new SimpleLocation("world", 1024 + i, k, 1024 + j);
-//                        plugin.getWorldManager().addPotAt(new MemoryPot(location, "sprinkler"), location);
-//                    }
-//                    for (int k = 191; k < 250; k++) {
-//                        SimpleLocation location = new SimpleLocation("world", 1024 + i, k, 1024 + j);
-//                        plugin.getWorldManager().addCropAt(new MemoryCrop(location, "tomato", 3), location);
-//                    }
-//                    for (int k = 251; k < 300; k++) {
-//                        SimpleLocation location = new SimpleLocation("world", 1024 + i, k, 1024 + j);
-//                        plugin.getWorldManager().addCropAt(new MemoryCrop(location, "sbsbssbsb", 3), location);
-//                    }
-//                    for (int k = 301; k < 320; k++) {
-//                        SimpleLocation location = new SimpleLocation("world", 1024 + i, k, 1024 + j);
-//                        plugin.getWorldManager().addCropAt(new MemoryCrop(location, "sbsbssbsb", 2), location);
-//                    }
-//                }
-//            }
-//        });
-//    }
 }

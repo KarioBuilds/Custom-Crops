@@ -46,7 +46,7 @@ public class PotConfig extends AbstractEventItem implements Pot {
     private final Requirement[] useRequirements;
     private final boolean acceptRainDrop;
     private final boolean acceptNearbyWater;
-    private boolean isVanillaBlock;
+    private final boolean isVanillaBlock;
 
     public PotConfig(
             String key,
@@ -160,5 +160,18 @@ public class PotConfig extends AbstractEventItem implements Pot {
     @Override
     public boolean isVanillaBlock() {
         return isVanillaBlock;
+    }
+
+    @Override
+    public boolean isWetPot(String id) {
+        if (id.equals(getWetItem())) {
+            return true;
+        }
+        for (Pair<String, String> pair : fertilizedPotMap.values()) {
+            if (pair.right().equals(id)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

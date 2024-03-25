@@ -18,12 +18,16 @@
 package net.momirealms.customcrops.mechanic.item;
 
 import net.momirealms.customcrops.api.manager.VersionManager;
+import net.momirealms.customcrops.api.mechanic.misc.CRotation;
 import net.momirealms.customcrops.utils.ConfigUtils;
+import net.momirealms.customcrops.utils.DisplayEntityUtils;
+import net.momirealms.customcrops.utils.RotationUtils;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
@@ -43,7 +47,7 @@ public interface CustomProvider {
         }
     }
 
-    void placeFurniture(Location location, String id);
+    Entity placeFurniture(Location location, String id);
 
     void removeFurniture(Entity entity);
 
@@ -67,18 +71,30 @@ public interface CustomProvider {
         return entities.size() == 0;
     }
 
-    default void removeAnythingAt(Location location) {
+    default CRotation removeAnythingAt(Location location) {
         if (!removeBlock(location)) {
-            Collection<Entity> entities = location.getWorld().getNearbyEntities(location.toCenterLocation(), 0.5,0.5,0.5);
+            Collection<Entity> entities = location.getWorld().getNearbyEntities(location.toCenterLocation(), 0.5,0.51,0.5);
             entities.removeIf(entity -> {
                 EntityType type = entity.getType();
                 return type != EntityType.ITEM_FRAME
                         && (!VersionManager.isHigherThan1_19_R3() || type != EntityType.ITEM_DISPLAY);
             });
+            if (entities.size() == 0) return CRotation.NONE;
+            CRotation previousCRotation;
+            Entity first = entities.stream().findFirst().get();
+            if (first instanceof ItemFrame itemFrame) {
+                previousCRotation = RotationUtils.getCRotation(itemFrame.getRotation());
+            } else if (VersionManager.isHigherThan1_19_R3()) {
+                previousCRotation = DisplayEntityUtils.getRotation(first);
+            } else {
+                previousCRotation = CRotation.NONE;
+            }
             for (Entity entity : entities) {
                 removeFurniture(entity);
             }
+            return previousCRotation;
         }
+        return CRotation.NONE;
     }
 
     default String getSomethingAt(Location location) {

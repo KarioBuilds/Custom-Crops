@@ -34,6 +34,7 @@ import net.momirealms.customcrops.manager.*;
 import net.momirealms.customcrops.mechanic.action.ActionManagerImpl;
 import net.momirealms.customcrops.mechanic.condition.ConditionManagerImpl;
 import net.momirealms.customcrops.mechanic.item.ItemManagerImpl;
+import net.momirealms.customcrops.mechanic.misc.migrator.Migration;
 import net.momirealms.customcrops.mechanic.requirement.RequirementManagerImpl;
 import net.momirealms.customcrops.mechanic.world.WorldManagerImpl;
 import net.momirealms.customcrops.scheduler.SchedulerImpl;
@@ -67,9 +68,7 @@ public class CustomCropsPluginImpl extends CustomCropsPlugin {
                         Dependency.ADVENTURE_TEXT_MINIMESSAGE,
                         Dependency.ADVENTURE_LEGACY_SERIALIZER,
                         Dependency.BSTATS_BASE,
-                        Dependency.BSTATS_BUKKIT,
-                        Dependency.BIOME_API,
-                        Dependency.ANTI_GRIEF
+                        Dependency.BSTATS_BUKKIT
                 )
         ));
 
@@ -102,8 +101,8 @@ public class CustomCropsPluginImpl extends CustomCropsPlugin {
         this.antiGriefLib.init();
         this.integrationManager.init();
         this.disableNBTAPILogs();
+        Migration.tryUpdating();
         this.reload();
-        this.worldManager.init();
         if (ConfigManager.metrics()) new Metrics(this, 16593);
         if (ConfigManager.checkUpdate()) {
             this.versionManager.checkUpdate().thenAccept(result -> {

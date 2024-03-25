@@ -33,12 +33,14 @@ public class VersionManagerImpl extends VersionManager {
     private final CustomCropsPlugin plugin;
     private final String pluginVersion;
     private final String serverVersion;
-    private boolean hasRegionScheduler;
+    private boolean foliaScheduler;
     private final boolean isSpigot;
     private final boolean isNewerThan1_19_R2;
     private final boolean isNewerThan1_19_R3;
     private final boolean isNewerThan1_20;
+    private final boolean isNewerThan1_20_R2;
     private final boolean isNewerThan1_19;
+    private final boolean isNewerThan1_18;
     private boolean isMojmap;
 
     @SuppressWarnings("deprecation")
@@ -51,27 +53,40 @@ public class VersionManagerImpl extends VersionManager {
         int main_ver = Integer.parseInt(split[1]);
 
         if (main_ver >= 20) {
+            isNewerThan1_20_R2 = Integer.parseInt(split[2].substring(1)) >= 2;
             isNewerThan1_19_R2 = true;
             isNewerThan1_19_R3 = true;
             isNewerThan1_20 = true;
             isNewerThan1_19 = true;
+            isNewerThan1_18 = true;
         } else if (main_ver == 19) {
             isNewerThan1_19_R2 = Integer.parseInt(split[2].substring(1)) >= 2;
             isNewerThan1_19_R3 = Integer.parseInt(split[2].substring(1)) >= 3;
             isNewerThan1_20 = false;
+            isNewerThan1_20_R2 = false;
             isNewerThan1_19 = true;
+            isNewerThan1_18 = true;
+        } else if (main_ver == 18) {
+            isNewerThan1_19_R2 = false;
+            isNewerThan1_19_R3 = false;
+            isNewerThan1_20_R2 = false;
+            isNewerThan1_20 = false;
+            isNewerThan1_19 = false;
+            isNewerThan1_18 = true;
         } else {
             isNewerThan1_19_R2 = false;
             isNewerThan1_19_R3 = false;
+            isNewerThan1_20_R2 = false;
             isNewerThan1_20 = false;
             isNewerThan1_19 = false;
+            isNewerThan1_18 = false;
         }
 
         try {
-            Class.forName("io.papermc.paper.threadedregions.scheduler.AsyncScheduler");
-            this.hasRegionScheduler = true;
+            Class.forName("io.papermc.paper.threadedregions.RegionizedServer");
+            this.foliaScheduler = true;
         } catch (ClassNotFoundException ignored) {
-            this.hasRegionScheduler = false;
+            this.foliaScheduler = false;
         }
 
         // Check if the server is Mojmap
@@ -84,8 +99,13 @@ public class VersionManagerImpl extends VersionManager {
     }
 
     @Override
+    public boolean isVersionNewerThan1_20_R2() {
+        return isNewerThan1_20_R2;
+    }
+
+    @Override
     public boolean hasRegionScheduler() {
-        return hasRegionScheduler;
+        return foliaScheduler;
     }
 
     @Override
@@ -121,6 +141,11 @@ public class VersionManagerImpl extends VersionManager {
     @Override
     public boolean isVersionNewerThan1_20() {
         return isNewerThan1_20;
+    }
+
+    @Override
+    public boolean isVersionNewerThan1_18() {
+        return isNewerThan1_18;
     }
 
     @Override
