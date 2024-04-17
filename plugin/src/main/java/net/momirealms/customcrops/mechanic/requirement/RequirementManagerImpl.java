@@ -37,8 +37,8 @@ import net.momirealms.customcrops.api.mechanic.world.season.Season;
 import net.momirealms.customcrops.api.util.LogUtils;
 import net.momirealms.customcrops.compatibility.VaultHook;
 import net.momirealms.customcrops.compatibility.papi.ParseUtils;
-import net.momirealms.customcrops.utils.ClassUtils;
-import net.momirealms.customcrops.utils.ConfigUtils;
+import net.momirealms.customcrops.util.ClassUtils;
+import net.momirealms.customcrops.util.ConfigUtils;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -419,9 +419,8 @@ public class RequirementManagerImpl implements RequirementManager {
             return state -> {
                 String currentWeather;
                 World world = state.getLocation().getWorld();
-                if (world.hasStorm()) currentWeather = "rainstorm";
+                if (world.isClearWeather()) currentWeather = "clear";
                 else if (world.isThundering()) currentWeather = "thunder";
-                else if (world.isClearWeather()) currentWeather = "clear";
                 else currentWeather = "rain";
                 for (String weather : weathers)
                     if (weather.equalsIgnoreCase(currentWeather))
@@ -587,6 +586,22 @@ public class RequirementManagerImpl implements RequirementManager {
     }
 
     private void registerNumberEqualRequirement() {
+        registerRequirement("=", (args, actions, advanced) -> {
+            if (args instanceof ConfigurationSection section) {
+                String v1 = section.getString("value1", "");
+                String v2 = section.getString("value2", "");
+                return state -> {
+                    String p1 = v1.startsWith("%") ? ParseUtils.setPlaceholders(state.getPlayer(), v1) : v1;
+                    String p2 = v2.startsWith("%") ? ParseUtils.setPlaceholders(state.getPlayer(), v2) : v2;
+                    if (Double.parseDouble(p1) == Double.parseDouble(p2)) return true;
+                    if (advanced) triggerActions(actions, state);
+                    return false;
+                };
+            } else {
+                LogUtils.warn("Wrong value format found at = requirement.");
+                return EmptyRequirement.instance;
+            }
+        });
         registerRequirement("==", (args, actions, advanced) -> {
             if (args instanceof ConfigurationSection section) {
                 String v1 = section.getString("value1", "");
@@ -599,7 +614,7 @@ public class RequirementManagerImpl implements RequirementManager {
                     return false;
                 };
             } else {
-                LogUtils.warn("Wrong value format found at !startsWith requirement.");
+                LogUtils.warn("Wrong value format found at == requirement.");
                 return EmptyRequirement.instance;
             }
         });
@@ -615,7 +630,7 @@ public class RequirementManagerImpl implements RequirementManager {
                     return false;
                 };
             } else {
-                LogUtils.warn("Wrong value format found at !startsWith requirement.");
+                LogUtils.warn("Wrong value format found at != requirement.");
                 return EmptyRequirement.instance;
             }
         });
@@ -858,7 +873,7 @@ public class RequirementManagerImpl implements RequirementManager {
                     return false;
                 };
             } else {
-                LogUtils.warn("Wrong value format found at in-list requirement.");
+                LogUtils.warn("Wrong value format found at !in-list requirement.");
                 return EmptyRequirement.instance;
             }
         });
@@ -947,7 +962,7 @@ public class RequirementManagerImpl implements RequirementManager {
     private void registerPotionEffectRequirement() {
         registerRequirement("potion-effect", (args, actions, advanced) -> {
             String potions = (String) args;
-            String[] split = potions.split("(<=|>=|<|>|==)", 2);
+            String[] split = potions.split("(<=|>=|<|>|==|=)", 2);
             PotionEffectType type = PotionEffectType.getByName(split[0]);
             if (type == null) {
                 LogUtils.warn("Potion effect doesn't exist: " + split[0]);
@@ -970,7 +985,7 @@ public class RequirementManagerImpl implements RequirementManager {
                     case ">" -> {
                         if (level > required) result = true;
                     }
-                    case "==" -> {
+                    case "==", "=" -> {
                         if (level == required) result = true;
                     }
                     case "!=" -> {

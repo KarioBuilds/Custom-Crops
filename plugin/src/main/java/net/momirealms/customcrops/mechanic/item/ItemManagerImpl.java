@@ -38,6 +38,7 @@ import net.momirealms.customcrops.api.mechanic.requirement.State;
 import net.momirealms.customcrops.api.mechanic.world.CustomCropsBlock;
 import net.momirealms.customcrops.api.mechanic.world.SimpleLocation;
 import net.momirealms.customcrops.api.mechanic.world.level.*;
+import net.momirealms.customcrops.api.util.LocationUtils;
 import net.momirealms.customcrops.api.util.LogUtils;
 import net.momirealms.customcrops.mechanic.item.custom.AbstractCustomListener;
 import net.momirealms.customcrops.mechanic.item.custom.crucible.CrucibleListener;
@@ -56,10 +57,10 @@ import net.momirealms.customcrops.mechanic.item.impl.SprinklerConfig;
 import net.momirealms.customcrops.mechanic.item.impl.WateringCanConfig;
 import net.momirealms.customcrops.mechanic.item.impl.fertilizer.*;
 import net.momirealms.customcrops.mechanic.world.block.*;
-import net.momirealms.customcrops.utils.ConfigUtils;
-import net.momirealms.customcrops.utils.EventUtils;
-import net.momirealms.customcrops.utils.ItemUtils;
-import net.momirealms.customcrops.utils.RotationUtils;
+import net.momirealms.customcrops.util.ConfigUtils;
+import net.momirealms.customcrops.util.EventUtils;
+import net.momirealms.customcrops.util.ItemUtils;
+import net.momirealms.customcrops.util.RotationUtils;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -124,13 +125,13 @@ public class ItemManagerImpl implements ItemManager {
         this.item2FertilizerMap = new HashMap<>();
         this.stage2CropStageMap = new HashMap<>();
         this.deadCrops = new HashSet<>();
-        if (Bukkit.getPluginManager().isPluginEnabled("Oraxen")) {
+        if (Bukkit.getPluginManager().getPlugin("Oraxen") != null) {
             listener = new OraxenListener(this);
             customProvider = new OraxenProvider();
-        } else if (Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) {
+        } else if (Bukkit.getPluginManager().getPlugin("ItemsAdder") != null) {
             listener = new ItemsAdderListener(this);
             customProvider = new ItemsAdderProvider();
-        } else if (Bukkit.getPluginManager().isPluginEnabled("MythicCrucible")) {
+        } else if (Bukkit.getPluginManager().getPlugin("MythicCrucible") != null) {
             listener = new CrucibleListener(this);
             customProvider = new CrucibleProvider();
         } else {
@@ -212,7 +213,7 @@ public class ItemManagerImpl implements ItemManager {
 
     @Override
     public String getItemID(ItemStack itemStack) {
-        if (itemStack == null)
+        if (itemStack == null || itemStack.getType() == Material.AIR || itemStack.getAmount() == 0)
             return "AIR";
         String id;
         id = customProvider.getItemID(itemStack);
@@ -221,7 +222,7 @@ public class ItemManagerImpl implements ItemManager {
             for (ItemLibrary library : itemDetectionArray) {
                 id = library.getItemID(itemStack);
                 if (id != null)
-                    return id;
+                    return library.identification() + ":" + id;
             }
         }
         return itemStack.getType().name();
@@ -235,7 +236,14 @@ public class ItemManagerImpl implements ItemManager {
             return itemStack;
         if (id.contains(":")) {
             String[] split = id.split(":", 2);
-            return itemLibraryMap.get(split[0]).buildItem(player, split[1]);
+            ItemLibrary library = itemLibraryMap.get(split[0]);
+            if (library == null) {
+                LogUtils.warn("Error occurred when building item: " + id + ". Possible causes:");
+                LogUtils.warn("① Item library: " + split[0] + " doesn't exist.");
+                LogUtils.warn("② If you are using ItemsAdder, " + id + " doesn't exist in your ItemsAdder config");
+                return new ItemStack(Material.AIR);
+            }
+            return library.buildItem(player, split[1]);
         } else {
             try {
                 return new ItemStack(Material.valueOf(id.toUpperCase(Locale.ENGLISH)));
@@ -1821,7 +1829,7 @@ public class ItemManagerImpl implements ItemManager {
                             }
 
                             Player player = interactWrapper.getPlayer();
-                            Location cropLocation = interactWrapper.getLocation().toBlockLocation();
+                            Location cropLocation = LocationUtils.toBlockLocation(interactWrapper.getLocation());
                             ItemStack itemInHand = interactWrapper.getItemInHand();
                             State cropState = new State(player, itemInHand, cropLocation);
 
@@ -1928,7 +1936,7 @@ public class ItemManagerImpl implements ItemManager {
                                 return FunctionResult.PASS;
                             }
                             Player player = breakWrapper.getPlayer();
-                            Location cropLocation = breakWrapper.getLocation().toBlockLocation();
+                            Location cropLocation = LocationUtils.toBlockLocation(breakWrapper.getLocation());
                             State state = new State(player, breakWrapper.getItemInHand(), cropLocation);
                             // check crop break requirements
                             if (!RequirementManager.isRequirementMet(state, crop.getBreakRequirements())) {
@@ -2267,7 +2275,7 @@ public class ItemManagerImpl implements ItemManager {
             return;
         }
         // Then check item in hand
-        String itemID = customProvider.getItemID(condition.getItemInHand());
+        String itemID = getItemID(condition.getItemInHand());
         Optional.ofNullable(itemID2FunctionMap.get(itemID))
                 .map(map -> map.get(FunctionTrigger.INTERACT_AT))
                 .ifPresent(itemFunctions -> handleFunctions(itemFunctions, condition, event));
@@ -2286,7 +2294,7 @@ public class ItemManagerImpl implements ItemManager {
 
         var condition = new InteractWrapper(player, null);
         // check item in hand
-        String itemID = customProvider.getItemID(condition.getItemInHand());
+        String itemID = getItemID(condition.getItemInHand());
         Optional.ofNullable(itemID2FunctionMap.get(itemID))
                 .map(map -> map.get(FunctionTrigger.INTERACT_AIR))
                 .ifPresent(cFunctions -> handleFunctions(cFunctions, condition, event));
@@ -2332,7 +2340,7 @@ public class ItemManagerImpl implements ItemManager {
             return;
         }
         // Then check item in hand
-        String itemID = customProvider.getItemID(condition.getItemInHand());
+        String itemID = getItemID(condition.getItemInHand());
         Optional.ofNullable(itemID2FunctionMap.get(itemID))
                 .map(map -> map.get(FunctionTrigger.INTERACT_AT))
                 .ifPresent(cFunctions -> handleFunctions(cFunctions, condition, event));

@@ -12,16 +12,9 @@ softdepend:
   - ItemsAdder
   - Oraxen
   - PlaceholderAPI
-  - EcoJobs
   - BattlePass
   - BetonQuest
   - ClueScrolls
-  - mcMMO
-  - AureliumSkills
-  - AuraSkills
-  - MMOCore
-  - EcoSkills
-  - Jobs
   - RealisticSeasons
   - AdvancedSeasons
   - SlimeWorldManager
@@ -34,7 +27,7 @@ softdepend:
   - GriefDefender
   - GriefPrevention
   - BentoBox
-  - IridiumSkyBlock
+  - IridiumSkyblock
   - KingdomsX
   - Landlord
   - Lands

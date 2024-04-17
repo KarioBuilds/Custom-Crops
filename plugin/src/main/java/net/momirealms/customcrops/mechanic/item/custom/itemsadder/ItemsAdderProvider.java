@@ -52,8 +52,6 @@ public class ItemsAdderProvider implements CustomProvider {
     @Override
     public Entity placeFurniture(Location location, String id) {
         try {
-            Location center = location.toCenterLocation();
-            center.setY(center.getBlockY());
             CustomFurniture furniture = CustomFurniture.spawnPreciseNonSolid(id, location);
             if (furniture == null) return null;
             return furniture.getEntity();
@@ -82,7 +80,7 @@ public class ItemsAdderProvider implements CustomProvider {
     public String getItemID(ItemStack itemInHand) {
         CustomStack customStack = CustomStack.byItemStack(itemInHand);
         if (customStack == null) {
-            return itemInHand.getType().name();
+            return null;
         }
         return customStack.getNamespacedID();
     }
