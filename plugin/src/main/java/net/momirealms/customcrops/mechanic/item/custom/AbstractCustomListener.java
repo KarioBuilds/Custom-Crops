@@ -145,9 +145,15 @@ public abstract class AbstractCustomListener implements Listener {
 
     @EventHandler (ignoreCancelled = true)
     public void onPlaceBlock(BlockPlaceEvent event) {
-        onPlaceBlock(
+        final Block block = event.getBlock();
+        // prevent players from placing blocks on entities (crops/sprinklers)
+        if (CustomCropsPlugin.get().getWorldManager().getBlockAt(SimpleLocation.of(block.getLocation())).isPresent()) {
+            event.setCancelled(true);
+            return;
+        }
+        this.onPlaceBlock(
                 event.getPlayer(),
-                event.getBlock(),
+                block,
                 event.getBlockPlaced().getType().name(),
                 event
         );
@@ -288,7 +294,7 @@ public abstract class AbstractCustomListener implements Listener {
                                     if (id.equals(itemID)) {
                                         storage.setAmount(storage.getAmount() - 1);
                                         boneMeal.trigger(new State(null, itemStack, location));
-                                        CustomCropsPlugin.get().getWorldManager().addPointToCrop(config, simpleLocation, boneMeal.getPoint());
+                                        CustomCropsPlugin.get().getWorldManager().addPointToCrop(config, boneMeal.getPoint(), simpleLocation);
                                     }
                                 }
                             }

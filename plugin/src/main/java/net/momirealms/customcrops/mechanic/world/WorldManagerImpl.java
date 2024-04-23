@@ -29,6 +29,7 @@ import net.momirealms.customcrops.api.mechanic.world.level.*;
 import net.momirealms.customcrops.api.util.LogUtils;
 import net.momirealms.customcrops.mechanic.world.adaptor.BukkitWorldAdaptor;
 import net.momirealms.customcrops.mechanic.world.adaptor.SlimeWorldAdaptor;
+import net.momirealms.customcrops.mechanic.world.block.*;
 import net.momirealms.customcrops.util.ConfigUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -289,13 +290,38 @@ public class WorldManagerImpl implements WorldManager, Listener {
     }
 
     @Override
+    public WorldCrop createCropData(SimpleLocation location, Crop crop, int point) {
+        return new MemoryCrop(location, crop.getKey(), point);
+    }
+
+    @Override
+    public WorldSprinkler createSprinklerData(SimpleLocation location, Sprinkler sprinkler, int water) {
+        return new MemorySprinkler(location, sprinkler.getKey(), water);
+    }
+
+    @Override
+    public WorldPot createPotData(SimpleLocation location, Pot pot, int water, Fertilizer fertilizer, int fertilizerTimes) {
+        return new MemoryPot(location, pot.getKey(), water, fertilizer == null ? "" : fertilizer.getKey(), fertilizerTimes);
+    }
+
+    @Override
+    public WorldGlass createGreenhouseGlassData(SimpleLocation location) {
+        return new MemoryGlass(location);
+    }
+
+    @Override
+    public WorldScarecrow createScarecrowData(SimpleLocation location) {
+        return new MemoryScarecrow(location);
+    }
+
+    @Override
     public void addWaterToSprinkler(@NotNull Sprinkler sprinkler, @NotNull SimpleLocation location, int amount) {
         CWorld cWorld = loadedWorlds.get(location.getWorldName());
         if (cWorld == null) {
             LogUtils.warn("Unsupported operation: Adding water to sprinkler in unloaded world " + location);
             return;
         }
-        cWorld.addWaterToSprinkler(sprinkler, location, amount);
+        cWorld.addWaterToSprinkler(sprinkler, amount, location);
     }
 
     @Override
@@ -309,13 +335,14 @@ public class WorldManagerImpl implements WorldManager, Listener {
     }
 
     @Override
-    public void addWaterToPot(@NotNull Pot pot, @NotNull SimpleLocation location, int amount) {
+    public void addWaterToPot(@NotNull Pot pot, int amount, @NotNull SimpleLocation location) {
+        if (amount <= 0) return;
         CWorld cWorld = loadedWorlds.get(location.getWorldName());
         if (cWorld == null) {
             LogUtils.warn("Unsupported operation: Adding water to pot in unloaded world " + location);
             return;
         }
-        cWorld.addWaterToPot(pot, location, amount);
+        cWorld.addWaterToPot(pot, amount, location);
     }
 
     @Override
@@ -349,13 +376,13 @@ public class WorldManagerImpl implements WorldManager, Listener {
     }
 
     @Override
-    public void addPointToCrop(@NotNull Crop crop, @NotNull SimpleLocation location, int points) {
+    public void addPointToCrop(@NotNull Crop crop, int points, @NotNull SimpleLocation location) {
         CWorld cWorld = loadedWorlds.get(location.getWorldName());
         if (cWorld == null) {
             LogUtils.warn("Unsupported operation: Adding point to crop in unloaded world " + location);
             return;
         }
-        cWorld.addPointToCrop(crop, location, points);
+        cWorld.addPointToCrop(crop, points, location);
     }
 
     @Override
@@ -379,53 +406,53 @@ public class WorldManagerImpl implements WorldManager, Listener {
     }
 
     @Override
-    public void removeSprinklerAt(@NotNull SimpleLocation location) {
+    public WorldSprinkler removeSprinklerAt(@NotNull SimpleLocation location) {
         CWorld cWorld = loadedWorlds.get(location.getWorldName());
         if (cWorld == null) {
             LogUtils.warn("Unsupported operation: Removing sprinkler from unloaded world " + location);
-            return;
+            return null;
         }
-        cWorld.removeSprinklerAt(location);
+        return cWorld.removeSprinklerAt(location);
     }
 
     @Override
-    public void removePotAt(@NotNull SimpleLocation location) {
+    public WorldPot removePotAt(@NotNull SimpleLocation location) {
         CWorld cWorld = loadedWorlds.get(location.getWorldName());
         if (cWorld == null) {
             LogUtils.warn("Unsupported operation: Removing pot from unloaded world " + location);
-            return;
+            return null;
         }
-        cWorld.removePotAt(location);
+        return cWorld.removePotAt(location);
     }
 
     @Override
-    public void removeCropAt(@NotNull SimpleLocation location) {
+    public WorldCrop removeCropAt(@NotNull SimpleLocation location) {
         CWorld cWorld = loadedWorlds.get(location.getWorldName());
         if (cWorld == null) {
             LogUtils.warn("Unsupported operation: Removing crop from unloaded world " + location);
-            return;
+            return null;
         }
-        cWorld.removeCropAt(location);
+        return cWorld.removeCropAt(location);
     }
 
     @Override
-    public void removeGlassAt(@NotNull SimpleLocation location) {
+    public WorldGlass removeGlassAt(@NotNull SimpleLocation location) {
         CWorld cWorld = loadedWorlds.get(location.getWorldName());
         if (cWorld == null) {
             LogUtils.warn("Unsupported operation: Removing glass from unloaded world " + location);
-            return;
+            return null;
         }
-        cWorld.removeGlassAt(location);
+        return cWorld.removeGlassAt(location);
     }
 
     @Override
-    public void removeScarecrowAt(@NotNull SimpleLocation location) {
+    public WorldScarecrow removeScarecrowAt(@NotNull SimpleLocation location) {
         CWorld cWorld = loadedWorlds.get(location.getWorldName());
         if (cWorld == null) {
             LogUtils.warn("Unsupported operation: Removing scarecrow from unloaded world " + location);
-            return;
+            return null;
         }
-        cWorld.removeScarecrowAt(location);
+        return cWorld.removeScarecrowAt(location);
     }
 
     @Override

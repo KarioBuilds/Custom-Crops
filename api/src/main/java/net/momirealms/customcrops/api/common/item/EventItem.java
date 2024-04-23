@@ -22,6 +22,11 @@ import net.momirealms.customcrops.api.mechanic.requirement.State;
 
 public interface EventItem {
 
+    /**
+     * Trigger events
+     *
+     * @param actionTrigger trigger
+     * @param state state
+     */
     void trigger(ActionTrigger actionTrigger, State state);
-
 }
