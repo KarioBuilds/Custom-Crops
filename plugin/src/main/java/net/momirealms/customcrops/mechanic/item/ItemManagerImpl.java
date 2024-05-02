@@ -29,6 +29,7 @@ import net.momirealms.customcrops.api.mechanic.action.ActionTrigger;
 import net.momirealms.customcrops.api.mechanic.condition.Conditions;
 import net.momirealms.customcrops.api.mechanic.condition.DeathConditions;
 import net.momirealms.customcrops.api.mechanic.item.*;
+import net.momirealms.customcrops.api.mechanic.item.custom.CustomProvider;
 import net.momirealms.customcrops.api.mechanic.item.water.PassiveFillMethod;
 import net.momirealms.customcrops.api.mechanic.item.water.PositiveFillMethod;
 import net.momirealms.customcrops.api.mechanic.misc.CRotation;
@@ -40,13 +41,15 @@ import net.momirealms.customcrops.api.mechanic.world.SimpleLocation;
 import net.momirealms.customcrops.api.mechanic.world.level.*;
 import net.momirealms.customcrops.api.util.LocationUtils;
 import net.momirealms.customcrops.api.util.LogUtils;
-import net.momirealms.customcrops.mechanic.item.custom.AbstractCustomListener;
+import net.momirealms.customcrops.api.mechanic.item.custom.AbstractCustomListener;
 import net.momirealms.customcrops.mechanic.item.custom.crucible.CrucibleListener;
 import net.momirealms.customcrops.mechanic.item.custom.crucible.CrucibleProvider;
 import net.momirealms.customcrops.mechanic.item.custom.itemsadder.ItemsAdderListener;
 import net.momirealms.customcrops.mechanic.item.custom.itemsadder.ItemsAdderProvider;
 import net.momirealms.customcrops.mechanic.item.custom.oraxen.OraxenListener;
 import net.momirealms.customcrops.mechanic.item.custom.oraxen.OraxenProvider;
+import net.momirealms.customcrops.mechanic.item.custom.oraxenlegacy.LegacyOraxenListener;
+import net.momirealms.customcrops.mechanic.item.custom.oraxenlegacy.LegacyOraxenProvider;
 import net.momirealms.customcrops.mechanic.item.function.CFunction;
 import net.momirealms.customcrops.mechanic.item.function.FunctionResult;
 import net.momirealms.customcrops.mechanic.item.function.FunctionTrigger;
@@ -58,7 +61,7 @@ import net.momirealms.customcrops.mechanic.item.impl.WateringCanConfig;
 import net.momirealms.customcrops.mechanic.item.impl.fertilizer.*;
 import net.momirealms.customcrops.mechanic.world.block.*;
 import net.momirealms.customcrops.util.ConfigUtils;
-import net.momirealms.customcrops.util.EventUtils;
+import net.momirealms.customcrops.api.util.EventUtils;
 import net.momirealms.customcrops.util.ItemUtils;
 import net.momirealms.customcrops.util.RotationUtils;
 import org.bukkit.*;
@@ -126,8 +129,13 @@ public class ItemManagerImpl implements ItemManager {
         this.stage2CropStageMap = new HashMap<>();
         this.deadCrops = new HashSet<>();
         if (Bukkit.getPluginManager().getPlugin("Oraxen") != null) {
-            listener = new OraxenListener(this);
-            customProvider = new OraxenProvider();
+            if (Bukkit.getPluginManager().getPlugin("Oraxen").getDescription().getVersion().startsWith("2")) {
+                listener = new OraxenListener(this);
+                customProvider = new OraxenProvider();
+            } else {
+                listener = new LegacyOraxenListener(this);
+                customProvider = new LegacyOraxenProvider();
+            }
         } else if (Bukkit.getPluginManager().getPlugin("ItemsAdder") != null) {
             listener = new ItemsAdderListener(this);
             customProvider = new ItemsAdderProvider();
@@ -140,7 +148,6 @@ public class ItemManagerImpl implements ItemManager {
             LogUtils.severe(" ItemsAdder: https://www.spigotmc.org/resources/73355/");
             LogUtils.severe(" Oraxen: https://www.spigotmc.org/resources/72448/");
             LogUtils.severe("======================================================");
-            Bukkit.getPluginManager().disablePlugin(plugin);
         }
     }
 
@@ -2329,6 +2336,7 @@ public class ItemManagerImpl implements ItemManager {
         }
     }
 
+    @Override
     @SuppressWarnings("DuplicatedCode")
     public void handlePlayerInteractBlock(
             Player player,
@@ -2359,6 +2367,7 @@ public class ItemManagerImpl implements ItemManager {
                 .ifPresent(itemFunctions -> handleFunctions(itemFunctions, condition, event));
     }
 
+    @Override
     public void handlePlayerInteractAir(
             Player player,
             Cancellable event
@@ -2378,6 +2387,7 @@ public class ItemManagerImpl implements ItemManager {
                 .ifPresent(cFunctions -> handleFunctions(cFunctions, condition, event));
     }
 
+    @Override
     public void handlePlayerBreakBlock(
             Player player,
             Block brokenBlock,
@@ -2396,6 +2406,7 @@ public class ItemManagerImpl implements ItemManager {
                 .ifPresent(cFunctions -> handleFunctions(cFunctions, new BreakBlockWrapper(player, brokenBlock), event));
     }
 
+    @Override
     @SuppressWarnings("DuplicatedCode")
     public void handlePlayerInteractFurniture(
             Player player,
@@ -2424,6 +2435,7 @@ public class ItemManagerImpl implements ItemManager {
                 .ifPresent(cFunctions -> handleFunctions(cFunctions, condition, event));
     }
 
+    @Override
     public void handlePlayerPlaceFurniture(
             Player player,
             Location location,
@@ -2443,6 +2455,7 @@ public class ItemManagerImpl implements ItemManager {
                 .ifPresent(cFunctions -> handleFunctions(cFunctions, new PlaceFurnitureWrapper(player, location, id), event));
     }
 
+    @Override
     public void handlePlayerBreakFurniture(
             Player player,
             Location location,
@@ -2462,6 +2475,7 @@ public class ItemManagerImpl implements ItemManager {
                 .ifPresent(cFunctions -> handleFunctions(cFunctions, new BreakFurnitureWrapper(player, location, id), event));
     }
 
+    @Override
     public void handlePlayerPlaceBlock(Player player, Block block, String blockID, Cancellable event) {
         if (!plugin.getWorldManager().isMechanicEnabled(player.getWorld()))
             return;
@@ -2476,6 +2490,7 @@ public class ItemManagerImpl implements ItemManager {
                 .ifPresent(cFunctions -> handleFunctions(cFunctions, new PlaceBlockWrapper(player, block, blockID), event));
     }
 
+    @Override
     public void handleEntityTramplingBlock(Entity entity, Block block, Cancellable event) {
         if (entity instanceof Player player) {
             handlePlayerBreakBlock(player, block, "FARMLAND", event);
@@ -2543,6 +2558,7 @@ public class ItemManagerImpl implements ItemManager {
         }
     }
 
+    @Override
     public void handleExplosion(Entity entity, List<Block> blocks, Cancellable event) {
         List<Location> locationsToRemove = new ArrayList<>();
         List<Location> locationsToRemoveBlock = new ArrayList<>();

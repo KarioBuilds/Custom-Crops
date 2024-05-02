@@ -58,7 +58,7 @@ import net.momirealms.customcrops.mechanic.misc.TempFakeItem;
 import net.momirealms.customcrops.mechanic.world.block.MemoryCrop;
 import net.momirealms.customcrops.util.ClassUtils;
 import net.momirealms.customcrops.util.ConfigUtils;
-import net.momirealms.customcrops.util.EventUtils;
+import net.momirealms.customcrops.api.util.EventUtils;
 import net.momirealms.customcrops.util.ItemUtils;
 import org.bukkit.*;
 import org.bukkit.block.BlockFace;
@@ -494,9 +494,12 @@ public class ActionManagerImpl implements ActionManager {
                     }
                     for (VariationCrop variationCrop : variations) {
                         if (Math.random() < variationCrop.getChance() + bonus) {
+                            SimpleLocation location = SimpleLocation.of(state.getLocation());
                             plugin.getItemManager().removeAnythingAt(state.getLocation());
-                            plugin.getWorldManager().removeAnythingAt(SimpleLocation.of(state.getLocation()));
+                            plugin.getWorldManager().removeAnythingAt(location);
                             plugin.getItemManager().placeItem(state.getLocation(), variationCrop.getItemCarrier(), variationCrop.getItemID());
+                            Optional.ofNullable(plugin.getItemManager().getCropStageByStageID(variationCrop.getItemID()))
+                                    .ifPresent(stage -> plugin.getWorldManager().addCropAt(new MemoryCrop(location, stage.getCrop().getKey(), stage.getPoint()), location));
                             break;
                         }
                     }
