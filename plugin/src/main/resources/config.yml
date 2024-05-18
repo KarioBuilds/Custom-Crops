@@ -1,5 +1,5 @@
 # Don't change
-config-version: '36'
+config-version: '37'
 
 # Debug
 debug: false
@@ -67,22 +67,22 @@ worlds:
         # which allows crops to grow at almost the same speed
         mode: RANDOM_TICK
         tick-interval: 1
-        # Limit the max amount of crops in one chunk
-        max-per-chunk: 256
+        # Limit the max amount of crops in one chunk (-1 = no limit)
+        max-per-chunk: -1
       # Settings for pots
       pot:
         # RANDOM_TICK / SCHEDULED_TICK
         mode: SCHEDULED_TICK
         tick-interval: 3
-        # Limit the max amount of pots in one chunk
+        # Limit the max amount of pots in one chunk (-1 = no limit)
         max-per-chunk: -1
       # Settings for sprinklers
       sprinkler:
         # RANDOM_TICK / SCHEDULED_TICK
         mode: SCHEDULED_TICK
         tick-interval: 2
-        # Limit the max amount of sprinklers in one chunk
-        max-per-chunk: 64
+        # Limit the max amount of sprinklers in one chunk (-1 = no limit)
+        max-per-chunk: -1
     # You can override the default settings for worlds here
     _WORLDS_:
       world_nether:
@@ -102,12 +102,17 @@ mechanics:
   scarecrow:
     enable: true
     id: '{0}scarecrow'
+    type: ITEM_FRAME
     range: 7
+    # If this option is enabled, the range above would not longer take effect
+    # This option would make the scarecrow protect all the crops in a chunk instead of crops in certain range
+    protect-chunk: false
 
   # Greenhouse glass prevents crops from withering from season changing
   greenhouse:
     enable: true
     id: '{0}greenhouse_glass'
+    type: CHORUS
     range: 5
 
   # Sync seasons

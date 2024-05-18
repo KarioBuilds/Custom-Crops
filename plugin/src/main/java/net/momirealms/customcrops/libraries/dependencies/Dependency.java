@@ -42,14 +42,14 @@ public enum Dependency {
     ASM(
             "org.ow2.asm",
             "asm",
-            "9.1",
+            "9.7",
             null,
             "asm"
     ),
     ASM_COMMONS(
             "org.ow2.asm",
             "asm-commons",
-            "9.1",
+            "9.7",
             null,
             "asm-commons"
     ),
@@ -72,20 +72,10 @@ public enum Dependency {
     BOOSTED_YAML(
             "dev{}dejvokep",
             "boosted-yaml",
-            "1.3.2",
+            "1.3.4",
             null,
             "boosted-yaml",
             Relocation.of("boostedyaml", "dev{}dejvokep{}boostedyaml")
-    ),
-    ADVENTURE_API(
-            "com.github.Xiao-MoMi",
-            "Adventure-Bundle",
-            "4.16.0",
-            "jitpack",
-            "adventure-bundle",
-            Relocation.of("adventure", "net{}kyori{}adventure"),
-            Relocation.of("option", "net{}kyori{}option"),
-            Relocation.of("examination", "net{}kyori{}examination")
     ),
     H2_DRIVER(
             "com.h2database",
@@ -114,30 +104,6 @@ public enum Dependency {
             "2.0.12",
             null,
             "slf4j-api"
-    ),
-    NBT_API(
-            "de{}tr7zw",
-            "item-nbt-api",
-            "2.12.3",
-            "codemc",
-            "item-nbt-api",
-            Relocation.of("changeme", "de{}tr7zw{}changeme")
-    ),
-    ANTI_GRIEF(
-            "com{}github{}Xiao-MoMi",
-            "AntiGriefLib",
-            "0.11",
-            "jitpack",
-            "antigrief-lib",
-            Relocation.of("antigrieflib", "net{}momirealms{}antigrieflib")
-    ),
-    BIOME_API(
-            "com{}github{}Xiao-MoMi",
-            "BiomeAPI",
-            "0.3",
-            "jitpack",
-            "biome-api",
-            Relocation.of("biomeapi", "net{}momirealms{}biomeapi")
     ),
     BSTATS_BASE(
             "org{}bstats",
@@ -198,7 +164,6 @@ public enum Dependency {
         String extra = classifier == null || classifier.isEmpty()
                 ? ""
                 : "-" + classifier;
-
         return name + "-" + this.version + extra + ".jar";
     }
 

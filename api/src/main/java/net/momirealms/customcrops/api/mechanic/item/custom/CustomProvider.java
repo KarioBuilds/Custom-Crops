@@ -65,33 +65,31 @@ public interface CustomProvider {
         Location center = LocationUtils.toCenterLocation(location);
         Collection<Entity> entities = center.getWorld().getNearbyEntities(center, 0.5,0.51,0.5);
         entities.removeIf(entity -> (entity instanceof Player || entity instanceof Item));
-        return entities.size() == 0;
+        return entities.isEmpty();
     }
 
     default CRotation removeAnythingAt(Location location) {
-        if (!removeBlock(location)) {
-            Collection<Entity> entities = location.getWorld().getNearbyEntities(LocationUtils.toCenterLocation(location), 0.5,0.51,0.5);
-            entities.removeIf(entity -> {
-                EntityType type = entity.getType();
-                return type != EntityType.ITEM_FRAME
-                        && (!VersionManager.isHigherThan1_19_R3() || type != EntityType.ITEM_DISPLAY);
-            });
-            if (entities.size() == 0) return CRotation.NONE;
-            CRotation previousCRotation;
-            Entity first = entities.stream().findFirst().get();
-            if (first instanceof ItemFrame itemFrame) {
-                previousCRotation = CRotation.getByRotation(itemFrame.getRotation());
-            } else if (VersionManager.isHigherThan1_19_R3()) {
-                previousCRotation = DisplayEntityUtils.getRotation(first);
-            } else {
-                previousCRotation = CRotation.NONE;
-            }
-            for (Entity entity : entities) {
-                removeFurniture(entity);
-            }
-            return previousCRotation;
+        removeBlock(location);
+        Collection<Entity> entities = location.getWorld().getNearbyEntities(LocationUtils.toCenterLocation(location), 0.5,0.51,0.5);
+        entities.removeIf(entity -> {
+            EntityType type = entity.getType();
+            return type != EntityType.ITEM_FRAME
+                    && (!VersionManager.isHigherThan1_19_R3() || type != EntityType.ITEM_DISPLAY);
+        });
+        if (entities.isEmpty()) return CRotation.NONE;
+        CRotation previousCRotation;
+        Entity first = entities.stream().findFirst().get();
+        if (first instanceof ItemFrame itemFrame) {
+            previousCRotation = CRotation.getByRotation(itemFrame.getRotation());
+        } else if (VersionManager.isHigherThan1_19_R3()) {
+            previousCRotation = DisplayEntityUtils.getRotation(first);
+        } else {
+            previousCRotation = CRotation.NONE;
         }
-        return CRotation.NONE;
+        for (Entity entity : entities) {
+            removeFurniture(entity);
+        }
+        return previousCRotation;
     }
 
     default String getSomethingAt(Location location) {
@@ -117,7 +115,7 @@ public interface CustomProvider {
                 return type != EntityType.ITEM_FRAME
                         && (!VersionManager.isHigherThan1_19_R3() || type != EntityType.ITEM_DISPLAY);
             });
-            if (entities.size() == 0) return CRotation.NONE;
+            if (entities.isEmpty()) return CRotation.NONE;
             CRotation rotation;
             Entity first = entities.stream().findFirst().get();
             if (first instanceof ItemFrame itemFrame) {
